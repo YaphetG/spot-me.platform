@@ -4,6 +4,8 @@
 /* eslint-disable */
 export type CreateBusinessRequest = {
     name: string;
+    latitude: number;
+    longitude: number;
     description?: string;
     website?: string;
     service_radius?: Record<string, any>;

@@ -28,7 +28,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 setCampaign(found);
             } else {
                 toast.error("Campaign not found");
-                router.push("/campaigns");
+                router.push("/admin/campaigns");
             }
         } catch (error) {
             console.error(error);
@@ -58,7 +58,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         <div className="flex flex-col gap-6 p-8">
             {/* Header */}
             <div className="flex items-center gap-4">
-                <Link href="/campaigns">
+                <Link href="/admin/campaigns">
                     <Button variant="ghost" size="icon">
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
@@ -75,14 +75,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                     </p>
                 </div>
 
-                {campaign.status === CampaignStatus.DRAFT && (
-                    <Button size="lg" asChild>
-                        <Link href={`/admin/campaigns/${campaign.id}/targeting`}>
-                            <Rocket className="mr-2 h-4 w-4" />
-                            Target & Launch
-                        </Link>
-                    </Button>
-                )}
+                <Button size="lg" asChild>
+                    <Link href={`/admin/campaigns/${campaign.id}/targeting`}>
+                        <Rocket className="mr-2 h-4 w-4" />
+                        Find & Invite Influencers
+                    </Link>
+                </Button>
             </div>
 
             {/* War Room */}

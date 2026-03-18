@@ -1,8 +1,11 @@
 "use client";
 
+// Disable Next.js caching for this page so it always fetches fresh influencers
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback } from "react";
 import { use } from "react";
-import { DefaultService, Campaign, Influencer, VerificationStatus } from "@/lib/api-client";
+import { DefaultService, Campaign, Influencer, VerificationStatus, Business } from "@/lib/api-client";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,7 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
     const router = useRouter();
 
     const [campaign, setCampaign] = useState<Campaign | null>(null);
+    const [business, setBusiness] = useState<Business | null>(null);
     const [radiusKm, setRadiusKm] = useState<number>(5);
     const [influencers, setInfluencers] = useState<EligibleInfluencer[]>([]);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -45,13 +49,21 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
                     if (found.target_radius_meters) {
                         setRadiusKm(found.target_radius_meters / 1000);
                     }
+
+                    // Fetch businesses to find the parent business
+                    const businesses = await DefaultService.getBusinesses();
+                    const parentBusiness = businesses.find(b => b.id === found.business_id);
+                    if (parentBusiness) {
+                        setBusiness(parentBusiness);
+                    }
+
                 } else {
                     toast.error("Campaign not found");
-                    router.push("/campaigns");
+                    router.push("/admin/campaigns");
                 }
             } catch (error) {
                 console.error(error);
-                toast.error("Failed to load campaign");
+                toast.error("Failed to load campaign data");
             }
         };
         fetchCampaign();
@@ -104,42 +116,35 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
 
     const handleLaunch = async () => {
         if (selectedIds.size === 0) {
-            toast.warning("Select at least one influencer to launch the campaign");
+            toast.warning("Select at least one influencer to invite");
             return;
         }
 
-        const confirm = window.confirm(
-            `Launch campaign with ${selectedIds.size} selected influencers?`
-        );
-        if (!confirm) return;
-
         setLaunching(true);
         try {
-            // Using fetch directly because generated client doesn't support body for /launch
-            const url = `${OpenAPI.BASE}/campaigns/${id}/launch`;
-            const token = localStorage.getItem("token"); // Assuming token is stored here or standard auth? Wait, DefaultService handles auth automatically, but for direct fetch we need headers.
-
-            // Wait, we can use the OpenAPI request utility to preserve tokens.
-            const { request } = await import("@/lib/api-client/core/request");
-
-            await request(OpenAPI, {
+            const influencerIds = Array.from(selectedIds);
+            const res = await fetch(`http://localhost:8000/api/v1/campaigns/${id}/invites/bulk`, {
                 method: "POST",
-                url: `/campaigns/${id}/launch`,
-                body: {
-                    influencer_ids: Array.from(selectedIds)
-                },
-                mediaType: "application/json"
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ influencer_ids: influencerIds })
             });
 
-            toast.success(`Campaign launched! Invited ${selectedIds.size} influencers.`);
-            router.push(`/admin/campaigns/${id}`);
+            if (res.ok) {
+                toast.success(`✅ Invited ${influencerIds.length} influencer(s) successfully!`);
+                router.push(`/admin/campaigns/${id}`);
+            } else {
+                const err = await res.text();
+                console.error("Bulk invite failed:", err);
+                toast.error(`Failed to invite influencers: ${res.status} ${res.statusText}`);
+            }
         } catch (error) {
-            console.error(error);
-            toast.error("Failed to launch campaign");
+            console.error("Network error on bulk invite:", error);
+            toast.error("Network error – could not reach the server.");
         } finally {
             setLaunching(false);
         }
     };
+
 
     const allCurrentSelected = influencers.length > 0 && influencers.every(inf => selectedIds.has(inf.id));
 
@@ -164,10 +169,15 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
                     <p className="text-muted-foreground mt-1">
                         Campaign: {campaign?.title}
                     </p>
+                    {business && business.location_point?.coordinates && (
+                        <p className="text-sm text-muted-foreground mt-1 flex items-center">
+                            📍 Inheriting location from <strong>{business.name}</strong> @ [{business.location_point.coordinates[1].toFixed(4)}, {business.location_point.coordinates[0].toFixed(4)}]
+                        </p>
+                    )}
                 </div>
                 <Button size="lg" onClick={handleLaunch} disabled={launching || selectedIds.size === 0}>
                     {launching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                    Launch for {selectedIds.size} Selected
+                    Invite {selectedIds.size} Selected
                 </Button>
             </div>
 

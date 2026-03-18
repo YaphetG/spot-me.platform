@@ -171,6 +171,7 @@ export class DefaultService {
     }
     /**
      * List eligible influencers matching campaign spatial logic
+     * Uses the campaign's location_point if set, otherwise falls back to the parent business's location_point. Overrides radius if target_radius_meters is set.
      * @param id
      * @param overrideRadiusMeters Optional radius override to preview reach before saving to campaign
      * @returns any List of matching influencers

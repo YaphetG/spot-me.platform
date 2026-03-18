@@ -9,6 +9,10 @@ export type Business = {
     name: string;
     description?: string | null;
     website?: string | null;
+    location_point?: {
+        type?: Business.type;
+        coordinates?: Array<number>;
+    };
     service_radius?: {
         type?: Business.type;
         coordinates?: Array<Array<Array<number>>>;
@@ -16,7 +20,7 @@ export type Business = {
 };
 export namespace Business {
     export enum type {
-        POLYGON = 'Polygon',
+        POINT = 'Point',
     }
 }
 

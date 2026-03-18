@@ -8,7 +8,7 @@ export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
 export { Business } from './models/Business';
-export type { Campaign } from './models/Campaign';
+export { Campaign } from './models/Campaign';
 export type { CampaignInvite } from './models/CampaignInvite';
 export { CampaignStatus } from './models/CampaignStatus';
 export type { CreateBusinessRequest } from './models/CreateBusinessRequest';

@@ -11,6 +11,15 @@ export type Campaign = {
     description?: string;
     budget_cents?: number;
     target_radius_meters?: number | null;
+    location_point?: {
+        type?: Campaign.type;
+        coordinates?: Array<number>;
+    } | null;
     status: CampaignStatus;
 };
+export namespace Campaign {
+    export enum type {
+        POINT = 'Point',
+    }
+}
 

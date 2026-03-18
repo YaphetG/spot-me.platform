@@ -2,7 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { UUID } from './UUID';
 export type CreateCampaignRequest = {
+    business_id: UUID;
     title: string;
     description?: string;
     budget_cents: number;
