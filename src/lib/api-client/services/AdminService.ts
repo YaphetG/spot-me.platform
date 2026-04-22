@@ -75,4 +75,36 @@ export class AdminService {
             mediaType: 'application/json',
         });
     }
+    /**
+     * List all proof-of-post submissions (admin review queue)
+     * @returns ProofOfPostSubmission[]
+     */
+    public static getSubmissions(): CancelablePromise<Array<Record<string, unknown>>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/submissions',
+        });
+    }
+    /**
+     * Admin approves a submission
+     * @param submissionId
+     */
+    public static approveSubmission(submissionId: string): CancelablePromise<Record<string, unknown>> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/submissions/{submission_id}/approve',
+            path: { 'submission_id': submissionId },
+        });
+    }
+    /**
+     * Admin rejects a submission
+     * @param submissionId
+     */
+    public static rejectSubmission(submissionId: string): CancelablePromise<Record<string, unknown>> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/submissions/{submission_id}/reject',
+            path: { 'submission_id': submissionId },
+        });
+    }
 }
