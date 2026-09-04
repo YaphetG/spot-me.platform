@@ -13,6 +13,7 @@ export type { CampaignInvite } from './models/CampaignInvite';
 export { CampaignStatus } from './models/CampaignStatus';
 export type { CreateBusinessRequest } from './models/CreateBusinessRequest';
 export type { CreateCampaignRequest } from './models/CreateCampaignRequest';
+export type { Deliverable } from './models/Deliverable';
 export type { CreateInfluencerManualRequest } from './models/CreateInfluencerManualRequest';
 export type { CreateUserRequest } from './models/CreateUserRequest';
 export type { Error } from './models/Error';

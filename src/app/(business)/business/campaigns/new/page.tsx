@@ -10,10 +10,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Ticket } from "lucide-react"
 import Link from "next/link"
 import { apiFetch } from "@/lib/api-fetch"
+import { DeliverablesEditor, emptyDeliverable, type Deliverable } from "@/components/deliverables-editor"
 
 export default function NewCampaignPage() {
     const router = useRouter()
     const [submitting, setSubmitting] = useState(false)
+    const [deliverables, setDeliverables] = useState<Deliverable[]>([emptyDeliverable()])
+    const [error, setError] = useState<string | null>(null)
     const [formData, setFormData] = useState({
         title: "",
         description: "",
@@ -28,6 +31,7 @@ export default function NewCampaignPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setSubmitting(true)
+        setError(null)
 
         try {
             const res = await apiFetch("/campaigns", {
@@ -36,7 +40,8 @@ export default function NewCampaignPage() {
                 body: JSON.stringify({
                     title: formData.title,
                     description: formData.description,
-                    budget_cents: Math.floor(parseFloat(formData.budget) * 100) || 0
+                    budget_cents: Math.floor(parseFloat(formData.budget) * 100) || 0,
+                    deliverables: deliverables.length > 0 ? deliverables : null
                 })
             })
 
@@ -44,11 +49,22 @@ export default function NewCampaignPage() {
                 router.push("/business/campaigns")
                 router.refresh()
             } else {
-                alert("Failed to create campaign. Check backend logs.")
+                // Show what actually went wrong. "Check backend logs" is not
+                // something a business owner can act on, and it hid real
+                // failures (e.g. an account with no linked business) behind a
+                // generic alert.
+                let detail = `Request failed with status ${res.status}.`
+                try {
+                    const body = await res.json()
+                    if (body?.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)
+                } catch {
+                    // response had no JSON body; keep the status-code message
+                }
+                setError(detail)
             }
         } catch (err) {
             console.error(err)
-            alert("Error creating campaign.")
+            setError(err instanceof Error ? err.message : "Could not reach the server.")
         } finally {
             setSubmitting(false)
         }
@@ -121,6 +137,20 @@ export default function NewCampaignPage() {
                             />
                             <p className="text-xs text-slate-500">The total amount you are willing to spend for this campaign.</p>
                         </div>
+
+                        <div className="border-t pt-6">
+                            <DeliverablesEditor
+                                value={deliverables}
+                                onChange={setDeliverables}
+                                disabled={submitting}
+                            />
+                        </div>
+
+                        {error && (
+                            <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                                {error}
+                            </div>
+                        )}
                     </CardContent>
                     <CardFooter className="flex justify-end gap-3 border-t pt-6 bg-slate-50/50">
                         <Button type="button" variant="outline" asChild>

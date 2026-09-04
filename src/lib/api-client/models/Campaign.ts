@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CampaignStatus } from './CampaignStatus';
 import type { UUID } from './UUID';
+import type { Deliverable } from './Deliverable';
 export type Campaign = {
     id: UUID;
     business_id: UUID;
@@ -11,6 +12,7 @@ export type Campaign = {
     description?: string;
     budget_cents?: number;
     target_radius_meters?: number | null;
+    deliverables?: Array<Deliverable> | null;
     location_point?: {
         type?: Campaign.type;
         coordinates?: Array<number>;

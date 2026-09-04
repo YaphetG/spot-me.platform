@@ -19,6 +19,7 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { DeliverablesEditor, emptyDeliverable, type Deliverable } from "@/components/deliverables-editor";
 import Link from "next/link";
 
 const formSchema = z.object({
@@ -32,6 +33,9 @@ export default function NewCampaignPage() {
     const searchParams = useSearchParams();
     const businessId = searchParams.get("business_id");
     const [isLoading, setIsLoading] = useState(false);
+    // Deliverables live outside react-hook-form: they are a repeating structure
+    // edited in place, not a flat field, and zod validation adds nothing here.
+    const [deliverables, setDeliverables] = useState<Deliverable[]>([emptyDeliverable()]);
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -54,7 +58,10 @@ export default function NewCampaignPage() {
                 business_id: businessId,
                 title: values.title,
                 description: values.description || "",
-                budget_cents: values.budget_dollars * 100
+                budget_cents: values.budget_dollars * 100,
+                // Drop rows the admin added but never filled in, so an empty
+                // deliverable cannot create an unsatisfiable requirement.
+                deliverables: deliverables.length > 0 ? deliverables : null,
             });
 
             toast.success("Campaign created!");
@@ -114,7 +121,11 @@ export default function NewCampaignPage() {
                                 <FormItem>
                                     <FormLabel>Description</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Brief details about the campaign..." {...field} />
+                                        <Textarea
+                                            rows={5}
+                                            placeholder="What is this campaign about? This is the subjective brief the AI review judges the post against."
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -134,6 +145,14 @@ export default function NewCampaignPage() {
                                 </FormItem>
                             )}
                         />
+
+                        <div className="border-t pt-6">
+                            <DeliverablesEditor
+                                value={deliverables}
+                                onChange={setDeliverables}
+                                disabled={isLoading}
+                            />
+                        </div>
 
                         <div className="flex gap-4 pt-4">
                             <Button type="button" variant="outline" onClick={() => router.back()}>
