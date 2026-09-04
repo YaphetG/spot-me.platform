@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AdminService, InfluencerRead, VerificationStatus } from "@/lib/api"
+import { AdminService, InfluencerRead, VerificationStatus } from "@/lib/api-client"
 import {
     Table,
     TableBody,

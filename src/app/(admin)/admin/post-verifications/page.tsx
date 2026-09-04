@@ -198,8 +198,20 @@ export default function PostVerificationsPage() {
                                             {/* Why, not just what. The old queue showed one
                                                 opaque note, so an admin approving a submission
                                                 had no idea what had actually been checked. */}
-                                            <TableCell className="px-6 text-sm max-w-[320px]">
-                                                <div className="flex flex-col gap-1.5">
+                                            {/* A flex item defaults to min-width:auto, so the
+                                                long LLM reasoning refused to shrink and spilled
+                                                across the columns to its right. min-w-0 plus
+                                                break-words keeps it inside its cell. */}
+                                            {/* The width has to live on an inner block: a <td>
+                                                in an auto-layout table ignores max-width, so the
+                                                long LLM reasoning spilled across the columns to
+                                                its right. */}
+                                            {/* shadcn's TableCell hardcodes whitespace-nowrap, so
+                                                the long LLM reasoning could never wrap and ran
+                                                across the columns to its right. Override it and
+                                                give the content a real width to wrap inside. */}
+                                            <TableCell className="px-6 text-sm align-top whitespace-normal">
+                                                <div className="flex flex-col gap-1.5 w-[420px] break-words">
                                                     {report?.reason && (
                                                         <span className="text-muted-foreground">{report.reason}</span>
                                                     )}
