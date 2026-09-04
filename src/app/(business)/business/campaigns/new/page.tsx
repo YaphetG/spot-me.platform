@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Ticket } from "lucide-react"
 import Link from "next/link"
+import { apiFetch } from "@/lib/api-fetch"
 
 export default function NewCampaignPage() {
     const router = useRouter()
@@ -29,7 +30,7 @@ export default function NewCampaignPage() {
         setSubmitting(true)
 
         try {
-            const res = await fetch("http://localhost:8000/api/v1/campaigns", {
+            const res = await apiFetch("/campaigns", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

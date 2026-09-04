@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Ticket, MapPin, Users, Calendar } from "lucide-react"
 import Link from "next/link"
+import { apiFetch } from "@/lib/api-fetch"
 
 export default function CampaignDetailsPage() {
     const params = useParams()
@@ -26,7 +27,7 @@ export default function CampaignDetailsPage() {
                 // Fetch the campaign details (assuming we have an endpoint, or we filter from all for now)
                 // For a robust app, you'd add a GET /api/v1/campaigns/{id} endpoint.
                 // Since we only have GET /api/v1/campaigns, we'll fetch all and filter.
-                const res = await fetch(`http://localhost:8000/api/v1/campaigns`)
+                const res = await apiFetch(`/campaigns`)
                 if (res.ok) {
                     const allCampaigns = await res.json()
                     const found = allCampaigns.find((c: any) => c.id === campaignId)
@@ -39,7 +40,7 @@ export default function CampaignDetailsPage() {
                 }
 
                 // Fetch invites for this campaign
-                const invitesRes = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/invites`)
+                const invitesRes = await apiFetch(`/campaigns/${campaignId}/invites`)
                 if (invitesRes.ok) {
                     const invitesData = await invitesRes.json()
                     setInvites(invitesData)
@@ -61,7 +62,7 @@ export default function CampaignDetailsPage() {
 
         try {
             // Launch the campaign directly without auto-inviting influencers
-            const res = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/launch`, {
+            const res = await apiFetch(`/campaigns/${campaignId}/launch`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ influencer_ids: [] })
@@ -72,7 +73,7 @@ export default function CampaignDetailsPage() {
                 const updatedCampaign = { ...campaign, status: "ACTIVE" };
                 setCampaign(updatedCampaign);
 
-                const invitesRes = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/invites`);
+                const invitesRes = await apiFetch(`/campaigns/${campaignId}/invites`);
                 if (invitesRes.ok) {
                     const invitesData = await invitesRes.json();
                     setInvites(invitesData);

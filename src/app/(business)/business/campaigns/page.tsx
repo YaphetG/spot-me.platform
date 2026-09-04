@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Ticket, Plus, MapPin } from "lucide-react"
 import Link from "next/link"
+import { apiFetch } from "@/lib/api-fetch"
 
 export default function BusinessCampaignsPage() {
     const [campaigns, setCampaigns] = useState<any[]>([])
@@ -16,11 +17,11 @@ export default function BusinessCampaignsPage() {
         const fetchCampaigns = async () => {
             try {
                 // First get the business to filter campaigns
-                const meRes = await fetch("http://localhost:8000/api/v1/businesses/me")
+                const meRes = await apiFetch("/businesses/me")
                 if (!meRes.ok) return
                 const meData = await meRes.json()
 
-                const res = await fetch(`http://localhost:8000/api/v1/campaigns?business_id=${meData.id}`)
+                const res = await apiFetch(`/campaigns?business_id=${meData.id}`)
                 if (res.ok) {
                     const data = await res.json()
                     setCampaigns(data)

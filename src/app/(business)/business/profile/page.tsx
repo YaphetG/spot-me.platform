@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
+import { apiFetch } from "@/lib/api-fetch"
 
 export default function BusinessProfilePage() {
     const [business, setBusiness] = useState<any>(null)
@@ -21,7 +22,7 @@ export default function BusinessProfilePage() {
     useEffect(() => {
         const fetchBusiness = async () => {
             try {
-                const res = await fetch("http://localhost:8000/api/v1/businesses/me")
+                const res = await apiFetch("/businesses/me")
                 if (res.ok) {
                     const data = await res.json()
                     setBusiness(data)
@@ -51,7 +52,7 @@ export default function BusinessProfilePage() {
 
         setSaving(true)
         try {
-            const res = await fetch(`http://localhost:8000/api/v1/businesses/${business.id}`, {
+            const res = await apiFetch(`/businesses/${business.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(formData)
