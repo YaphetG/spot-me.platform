@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { Rocket, Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { OpenAPI } from "@/lib/api-client/core/OpenAPI";
+import { apiSend } from "@/lib/api-fetch";
 
 type EligibleInfluencer = Influencer & { distance_meters?: number };
 
@@ -123,23 +123,21 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
         setLaunching(true);
         try {
             const influencerIds = Array.from(selectedIds);
-            const res = await fetch(`http://localhost:8000/api/v1/campaigns/${id}/invites/bulk`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ influencer_ids: influencerIds })
-            });
+            // A DRAFT campaign is launched with these invites; an ACTIVE one
+            // just gets more. This used to call bulk-invite with a raw fetch:
+            // no auth header (401 since the API enforced auth) and, before
+            // that, invites that no workflow would ever process.
+            const path = campaign?.status === "DRAFT"
+                ? `/campaigns/${id}/launch`
+                : `/campaigns/${id}/invites/bulk`;
+            await apiSend(path, "POST", { influencer_ids: influencerIds });
 
-            if (res.ok) {
-                toast.success(`✅ Invited ${influencerIds.length} influencer(s) successfully!`);
-                router.push(`/admin/campaigns/${id}`);
-            } else {
-                const err = await res.text();
-                console.error("Bulk invite failed:", err);
-                toast.error(`Failed to invite influencers: ${res.status} ${res.statusText}`);
-            }
+            toast.success(`Invited ${influencerIds.length} influencer(s)`);
+            router.push(`/admin/campaigns/${id}`);
         } catch (error) {
-            console.error("Network error on bulk invite:", error);
-            toast.error("Network error – could not reach the server.");
+            // apiSend surfaces the API's detail, e.g. the 503 "safe to retry".
+            console.error("Invite failed:", error);
+            toast.error(error instanceof Error ? error.message : "Could not reach the server.");
         } finally {
             setLaunching(false);
         }
