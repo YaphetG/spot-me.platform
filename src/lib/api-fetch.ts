@@ -50,7 +50,14 @@ async function toError(res: Response): Promise<Error> {
     let detail = `Request failed (${res.status})`;
     try {
         const body = await res.json();
-        if (typeof body?.detail === "string") detail = body.detail;
+        if (typeof body?.detail === "string") {
+            detail = body.detail;
+        } else if (Array.isArray(body?.detail) && body.detail.length > 0) {
+            // FastAPI validation errors: [{loc, msg, ...}]. Show the first
+            // message without pydantic's "Value error, " prefix.
+            const msg = String(body.detail[0]?.msg ?? "");
+            detail = msg.replace(/^Value error, /, "") || detail;
+        }
     } catch {
         /* non-JSON error body */
     }

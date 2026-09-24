@@ -41,7 +41,8 @@ export default function NewCampaignPage() {
     const [formData, setFormData] = useState({
         title: "",
         description: "",
-        budget: ""
+        budget: "",
+        fee: ""
     })
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -55,6 +56,16 @@ export default function NewCampaignPage() {
             setError("Choose which business this campaign is for.")
             return
         }
+        const budgetCents = Math.round(parseFloat(formData.budget) * 100) || 0
+        const feeCents = Math.round(parseFloat(formData.fee) * 100) || 0
+        if (feeCents <= 0) {
+            setError("Set the fee each influencer will be paid.")
+            return
+        }
+        if (feeCents > budgetCents) {
+            setError("The fee per influencer cannot exceed the total budget.")
+            return
+        }
         setSubmitting(true)
         setError(null)
 
@@ -66,7 +77,8 @@ export default function NewCampaignPage() {
                     business_id: businessId,
                     title: formData.title,
                     description: formData.description,
-                    budget_cents: Math.floor(parseFloat(formData.budget) * 100) || 0,
+                    budget_cents: budgetCents,
+                    influencer_fee_cents: feeCents,
                     deliverables: deliverables.length > 0 ? deliverables : null
                 })
             })
@@ -184,6 +196,28 @@ export default function NewCampaignPage() {
                                 placeholder="500.00"
                             />
                             <p className="text-xs text-slate-500">The total amount you are willing to spend for this campaign.</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="fee">Fee per Influencer ($)</Label>
+                            <Input
+                                id="fee"
+                                name="fee"
+                                type="number"
+                                min="1"
+                                step="any"
+                                value={formData.fee}
+                                onChange={handleChange}
+                                required
+                                placeholder="50.00"
+                            />
+                            <p className="text-xs text-slate-500">
+                                What each influencer you invite is offered. Your budget covers
+                                {(() => {
+                                    const b = parseFloat(formData.budget), f = parseFloat(formData.fee)
+                                    return b > 0 && f > 0 ? ` ${Math.floor(b / f)} influencer${Math.floor(b / f) === 1 ? "" : "s"} at this fee.` : " as many influencers as it allows at this fee."
+                                })()}
+                            </p>
                         </div>
 
                         <div className="border-t pt-6">

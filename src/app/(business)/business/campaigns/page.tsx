@@ -24,6 +24,7 @@ interface Campaign {
     description: string | null
     status: string
     budget_cents: number
+    influencer_fee_cents: number | null
     target_radius_meters: number | null
     created_at: string
 }
@@ -139,6 +140,12 @@ export default function BusinessCampaignsPage() {
                                     <div className="flex flex-col">
                                         <span className="text-slate-500">Budget</span>
                                         <span className="font-medium">${(camp.budget_cents / 100).toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-slate-500">Fee / influencer</span>
+                                        <span className="font-medium">
+                                            {camp.influencer_fee_cents != null ? `$${(camp.influencer_fee_cents / 100).toFixed(2)}` : "Not set"}
+                                        </span>
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-slate-500">Radius</span>

@@ -21,6 +21,7 @@ interface Campaign {
     description: string | null
     status: string
     budget_cents: number
+    influencer_fee_cents: number | null
     target_radius_meters: number | null
     created_at: string
 }
@@ -200,11 +201,19 @@ export default function CampaignDetailsPage() {
                             </p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
                             <div>
                                 <h3 className="text-sm font-medium text-slate-500 mb-1">Budget</h3>
                                 <p className="text-2xl font-semibold text-slate-900">
                                     ${(campaign.budget_cents / 100).toFixed(2)}
+                                </p>
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-medium text-slate-500 mb-1">Fee per influencer</h3>
+                                <p className="text-2xl font-semibold text-slate-900">
+                                    {campaign.influencer_fee_cents != null
+                                        ? `$${(campaign.influencer_fee_cents / 100).toFixed(2)}`
+                                        : "Not set"}
                                 </p>
                             </div>
                             <div>
