@@ -7,11 +7,22 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
-import { apiFetch } from "@/lib/api-fetch"
+import { toast } from "sonner"
+import { apiSend } from "@/lib/api-fetch"
+import { fetchMyBusinesses, type MyBusiness } from "@/lib/businesses"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 export default function BusinessProfilePage() {
-    const [business, setBusiness] = useState<any>(null)
+    const [businesses, setBusinesses] = useState<MyBusiness[]>([])
+    const [business, setBusiness] = useState<MyBusiness | null>(null)
     const [loading, setLoading] = useState(true)
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [saving, setSaving] = useState(false)
     const [formData, setFormData] = useState({
         name: "",
@@ -22,24 +33,28 @@ export default function BusinessProfilePage() {
     useEffect(() => {
         const fetchBusiness = async () => {
             try {
-                const res = await apiFetch("/businesses/me")
-                if (res.ok) {
-                    const data = await res.json()
-                    setBusiness(data)
-                    setFormData({
-                        name: data.name || "",
-                        description: data.description || "",
-                        website: data.website || ""
-                    })
-                }
+                // An owner may run several businesses; this used to show only
+                // the one /businesses/me picked arbitrarily.
+                const mine = await fetchMyBusinesses()
+                setBusinesses(mine)
+                if (mine.length > 0) selectBusiness(mine[0])
             } catch (err) {
-                console.error("Failed to fetch business", err)
+                setLoadError(err instanceof Error ? err.message : "Could not load your businesses.")
             } finally {
                 setLoading(false)
             }
         }
         fetchBusiness()
     }, [])
+
+    const selectBusiness = (b: MyBusiness) => {
+        setBusiness(b)
+        setFormData({
+            name: b.name || "",
+            description: b.description || "",
+            website: b.website || ""
+        })
+    }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target
@@ -52,20 +67,12 @@ export default function BusinessProfilePage() {
 
         setSaving(true)
         try {
-            const res = await apiFetch(`/businesses/${business.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData)
-            })
-
-            if (res.ok) {
-                alert("Profile updated successfully")
-            } else {
-                alert("Failed to update profile")
-            }
+            const updated = await apiSend<MyBusiness>(`/businesses/${business.id}`, "PATCH", formData)
+            setBusinesses(prev => prev.map(b => (b.id === updated.id ? updated : b)))
+            setBusiness(updated)
+            toast.success(`Saved ${updated.name}.`)
         } catch (err) {
-            console.error("Failed to update business", err)
-            alert("An error occurred")
+            toast.error(err instanceof Error ? err.message : "Could not save the profile.")
         } finally {
             setSaving(false)
         }
@@ -87,7 +94,7 @@ export default function BusinessProfilePage() {
                     <CardHeader>
                         <CardTitle className="text-red-800">No Business Found</CardTitle>
                         <CardDescription className="text-red-600">
-                            We could not find your business profile. Please make sure the seed script has been run.
+                            {loadError ?? "No business is linked to this account yet."}
                         </CardDescription>
                     </CardHeader>
                 </Card>
@@ -101,6 +108,31 @@ export default function BusinessProfilePage() {
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900">Business Profile</h1>
                 <p className="text-slate-500 mt-2">Update your public-facing business details.</p>
             </div>
+
+            {businesses.length > 1 && (
+                <div className="space-y-2">
+                    <Label htmlFor="business-select">Business</Label>
+                    <Select
+                        value={business.id}
+                        onValueChange={id => {
+                            const next = businesses.find(b => b.id === id)
+                            if (next) selectBusiness(next)
+                        }}
+                    >
+                        <SelectTrigger id="business-select" className="w-full sm:w-[320px]">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {businesses.map(b => (
+                                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-500">
+                        You manage {businesses.length} businesses. Changes apply only to the one selected.
+                    </p>
+                </div>
+            )}
 
             <Card>
                 <CardHeader>
