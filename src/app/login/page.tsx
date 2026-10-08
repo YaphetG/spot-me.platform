@@ -49,14 +49,20 @@ export default function LoginPage() {
             const response = await DefaultService.postAuthToken(formData);
 
             if (response.access_token) {
+                // login() loads the account to learn its role, then routes to
+                // the right portal. Await it so a failure surfaces here.
+                await login(response.access_token);
                 toast.success("Successfully logged in!");
-                login(response.access_token);
             } else {
                 toast.error("Invalid credentials.");
             }
         } catch (error) {
             console.error(error);
-            toast.error("Failed to login", { description: "Invalid email or password." });
+            const description =
+                error instanceof Error && error.message
+                    ? error.message
+                    : "Invalid email or password.";
+            toast.error("Failed to login", { description });
         } finally {
             setIsLoading(false);
         }

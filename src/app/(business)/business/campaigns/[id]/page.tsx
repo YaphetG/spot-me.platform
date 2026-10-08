@@ -1,22 +1,71 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useState, useEffect, useCallback } from "react"
+import { useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Ticket, MapPin, Users, Calendar } from "lucide-react"
+import { ArrowLeft, Ticket, MapPin, Users, Calendar, RefreshCw, Check, X } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner"
+import { apiFetch, apiGet, apiSend } from "@/lib/api-fetch"
+
+type InviteStatus =
+    | "INVITED" | "INTERESTED" | "DECLINED" | "NEGOTIATING"
+    | "SCHEDULED" | "COMPLETED" | "PASSED"
+
+interface Campaign {
+    id: string
+    title: string
+    description: string | null
+    status: string
+    budget_cents: number
+    influencer_fee_cents: number | null
+    target_radius_meters: number | null
+    created_at: string
+}
+
+interface CampaignInvite {
+    id: string
+    status: InviteStatus
+    quoted_rate_cents: number | null
+    created_at: string
+    influencer: { id: string; handle: string; platform: string }
+}
+
+// What each status means from the business's side of the table.
+const STATUS_LABEL: Record<InviteStatus, string> = {
+    INVITED: "Awaiting reply",
+    INTERESTED: "Interested",
+    DECLINED: "Declined",
+    NEGOTIATING: "Negotiating",
+    SCHEDULED: "Booked",
+    COMPLETED: "Completed",
+    PASSED: "Passed",
+}
 
 export default function CampaignDetailsPage() {
     const params = useParams()
-    const router = useRouter()
     const campaignId = params.id as string
 
-    const [campaign, setCampaign] = useState<any>(null)
-    const [invites, setInvites] = useState<any[]>([])
+    const [campaign, setCampaign] = useState<Campaign | null>(null)
+    const [invites, setInvites] = useState<CampaignInvite[]>([])
     const [loading, setLoading] = useState(true)
+    const [invitesError, setInvitesError] = useState<string | null>(null)
+    // Invite id with a decision in flight, so its buttons can't be double-clicked.
+    const [deciding, setDeciding] = useState<string | null>(null)
+
+    const loadInvites = useCallback(async () => {
+        try {
+            setInvites(await apiGet<CampaignInvite[]>(`/campaigns/${campaignId}/invites`))
+            setInvitesError(null)
+        } catch (err) {
+            // Previously a failed request left the list empty, which reads as
+            // "nobody has been invited" rather than "we couldn't load them".
+            setInvitesError(err instanceof Error ? err.message : "Could not load invites")
+        }
+    }, [campaignId])
 
     useEffect(() => {
         if (!campaignId) return
@@ -26,10 +75,10 @@ export default function CampaignDetailsPage() {
                 // Fetch the campaign details (assuming we have an endpoint, or we filter from all for now)
                 // For a robust app, you'd add a GET /api/v1/campaigns/{id} endpoint.
                 // Since we only have GET /api/v1/campaigns, we'll fetch all and filter.
-                const res = await fetch(`http://localhost:8000/api/v1/campaigns`)
+                const res = await apiFetch(`/campaigns`)
                 if (res.ok) {
                     const allCampaigns = await res.json()
-                    const found = allCampaigns.find((c: any) => c.id === campaignId)
+                    const found = allCampaigns.find((c: Campaign) => c.id === campaignId)
                     if (found) {
                         setCampaign(found)
                     } else {
@@ -38,13 +87,7 @@ export default function CampaignDetailsPage() {
                     }
                 }
 
-                // Fetch invites for this campaign
-                const invitesRes = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/invites`)
-                if (invitesRes.ok) {
-                    const invitesData = await invitesRes.json()
-                    setInvites(invitesData)
-                }
-
+                await loadInvites()
             } catch (err) {
                 console.error("Failed to fetch campaign details", err)
             } finally {
@@ -53,38 +96,38 @@ export default function CampaignDetailsPage() {
         }
 
         fetchDetails()
-    }, [campaignId])
+    }, [campaignId, loadInvites])
 
 
     const handleLaunch = async () => {
         if (!campaignId) return;
 
         try {
-            // Launch the campaign directly without auto-inviting influencers
-            const res = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/launch`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ influencer_ids: [] })
-            });
-
-            if (res.ok) {
-                // Refresh data
-                const updatedCampaign = { ...campaign, status: "ACTIVE" };
-                setCampaign(updatedCampaign);
-
-                const invitesRes = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/invites`);
-                if (invitesRes.ok) {
-                    const invitesData = await invitesRes.json();
-                    setInvites(invitesData);
-                }
-
-                alert("Campaign launched successfully! It is now ACTIVE.");
-            } else {
-                alert("Failed to launch campaign.");
-            }
+            // Launch with no invites; influencers are invited afterwards. Any
+            // invites staged while the campaign was a draft go out now.
+            await apiSend(`/campaigns/${campaignId}/launch`, "POST", { influencer_ids: [] })
+            setCampaign(c => c && { ...c, status: "ACTIVE" })
+            await loadInvites()
+            toast.success("Campaign launched. It is now active.")
         } catch (err) {
-            console.error("Failed to launch campaign", err);
-            alert("Error launching campaign.");
+            toast.error(err instanceof Error ? err.message : "Could not launch the campaign.")
+        }
+    }
+
+    const decide = async (invite: CampaignInvite, decision: "BOOK" | "PASS") => {
+        setDeciding(invite.id)
+        try {
+            await apiSend(`/invites/${invite.id}/signal`, "POST", { decision })
+            toast.success(decision === "BOOK"
+                ? `Booked @${invite.influencer.handle}.`
+                : `Passed on @${invite.influencer.handle}.`)
+        } catch (err) {
+            // e.g. 503 while the workflow engine is down (nothing changed), or
+            // 409 if the offer already expired.
+            toast.error(err instanceof Error ? err.message : "Could not record your decision.")
+        } finally {
+            setDeciding(null)
+            await loadInvites()
         }
     }
 
@@ -104,7 +147,7 @@ export default function CampaignDetailsPage() {
             <div className="w-full justify-center flex p-12">
                 <div className="text-center">
                     <h2 className="text-2xl font-bold text-slate-900">Campaign Not Found</h2>
-                    <p className="text-slate-500 mt-2 mb-6">The campaign you are looking for does not exist or you don't have access.</p>
+                    <p className="text-slate-500 mt-2 mb-6">The campaign you are looking for does not exist or you don&apos;t have access.</p>
                     <Button asChild>
                         <Link href="/business/campaigns">Back to Campaigns</Link>
                     </Button>
@@ -158,11 +201,19 @@ export default function CampaignDetailsPage() {
                             </p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
                             <div>
                                 <h3 className="text-sm font-medium text-slate-500 mb-1">Budget</h3>
                                 <p className="text-2xl font-semibold text-slate-900">
                                     ${(campaign.budget_cents / 100).toFixed(2)}
+                                </p>
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-medium text-slate-500 mb-1">Fee per influencer</h3>
+                                <p className="text-2xl font-semibold text-slate-900">
+                                    {campaign.influencer_fee_cents != null
+                                        ? `$${(campaign.influencer_fee_cents / 100).toFixed(2)}`
+                                        : "Not set"}
                                 </p>
                             </div>
                             <div>
@@ -179,30 +230,73 @@ export default function CampaignDetailsPage() {
                 {/* Influencers Sidebar */}
                 <Card className="h-fit">
                     <CardHeader>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <Users className="h-5 w-5 text-primary" />
-                            Influencers
-                        </CardTitle>
-                        <CardDescription>
-                            People invited to this campaign.
-                        </CardDescription>
+                        <div className="flex items-start justify-between gap-2">
+                            <div>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <Users className="h-5 w-5 text-primary" />
+                                    Influencers
+                                </CardTitle>
+                                <CardDescription>
+                                    Book the ones who are interested.
+                                </CardDescription>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={loadInvites} aria-label="Refresh invites">
+                                <RefreshCw className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </CardHeader>
                     <CardContent>
-                        {invites.length === 0 ? (
+                        {invitesError ? (
+                            <div className="text-center py-6 text-sm">
+                                <p className="text-red-600">{invitesError}</p>
+                                <Button variant="outline" size="sm" className="mt-3" onClick={loadInvites}>
+                                    Try again
+                                </Button>
+                            </div>
+                        ) : invites.length === 0 ? (
                             <div className="text-center py-6 text-sm text-slate-500">
                                 No influencers have been invited to this campaign yet.
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {invites.map((invite: any) => (
-                                    <div key={invite.id} className="flex items-center justify-between border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                                        <div>
-                                            <p className="font-medium text-sm text-slate-900">Influencer {invite.influencer_id.substring(0, 6)}</p>
-                                            <p className="text-xs text-slate-500">{new Date(invite.created_at).toLocaleDateString()}</p>
+                                {invites.map((invite) => (
+                                    <div key={invite.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="font-medium text-sm text-slate-900 truncate">@{invite.influencer.handle}</p>
+                                                <p className="text-xs text-slate-500 capitalize">
+                                                    {invite.influencer.platform.toLowerCase()}
+                                                    {invite.quoted_rate_cents != null && ` · $${(invite.quoted_rate_cents / 100).toFixed(2)}`}
+                                                </p>
+                                            </div>
+                                            <Badge
+                                                variant={invite.status === "INTERESTED" ? "default" : "outline"}
+                                                className="text-[10px] shrink-0"
+                                            >
+                                                {STATUS_LABEL[invite.status] ?? invite.status}
+                                            </Badge>
                                         </div>
-                                        <Badge variant="outline" className="text-[10px] capitalize">
-                                            {invite.status.toLowerCase()}
-                                        </Badge>
+                                        {invite.status === "INTERESTED" && (
+                                            <div className="flex gap-2 mt-2">
+                                                <Button
+                                                    size="sm"
+                                                    className="flex-1"
+                                                    disabled={deciding === invite.id}
+                                                    onClick={() => decide(invite, "BOOK")}
+                                                >
+                                                    <Check className="h-3.5 w-3.5 mr-1" /> Book
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="flex-1"
+                                                    disabled={deciding === invite.id}
+                                                    onClick={() => decide(invite, "PASS")}
+                                                >
+                                                    <X className="h-3.5 w-3.5 mr-1" /> Pass
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>

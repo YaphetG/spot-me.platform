@@ -7,32 +7,60 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Ticket, Plus, MapPin } from "lucide-react"
 import Link from "next/link"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { apiGet } from "@/lib/api-fetch"
+import { fetchMyBusinesses, type MyBusiness } from "@/lib/businesses"
+
+interface Campaign {
+    id: string
+    business_id: string
+    title: string
+    description: string | null
+    status: string
+    budget_cents: number
+    influencer_fee_cents: number | null
+    target_radius_meters: number | null
+    created_at: string
+}
+
+const ALL = "all"
 
 export default function BusinessCampaignsPage() {
-    const [campaigns, setCampaigns] = useState<any[]>([])
+    const [campaigns, setCampaigns] = useState<Campaign[]>([])
+    const [businesses, setBusinesses] = useState<MyBusiness[]>([])
+    const [filter, setFilter] = useState<string>(ALL)
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         const fetchCampaigns = async () => {
             try {
-                // First get the business to filter campaigns
-                const meRes = await fetch("http://localhost:8000/api/v1/businesses/me")
-                if (!meRes.ok) return
-                const meData = await meRes.json()
-
-                const res = await fetch(`http://localhost:8000/api/v1/campaigns?business_id=${meData.id}`)
-                if (res.ok) {
-                    const data = await res.json()
-                    setCampaigns(data)
-                }
+                // GET /campaigns is already scoped to the caller's businesses -
+                // all of them. This used to filter to the single business
+                // /businesses/me happened to return, hiding the rest.
+                const [camps, mine] = await Promise.all([
+                    apiGet<Campaign[]>("/campaigns"),
+                    fetchMyBusinesses(),
+                ])
+                setCampaigns(camps)
+                setBusinesses(mine)
             } catch (err) {
-                console.error("Failed to fetch campaigns", err)
+                setError(err instanceof Error ? err.message : "Could not load campaigns")
             } finally {
                 setLoading(false)
             }
         }
         fetchCampaigns()
     }, [])
+
+    const businessName = (id: string) => businesses.find(b => b.id === id)?.name
+    const visible = filter === ALL ? campaigns : campaigns.filter(c => c.business_id === filter)
 
     if (loading) {
         return (
@@ -53,20 +81,37 @@ export default function BusinessCampaignsPage() {
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900">Campaigns</h1>
                     <p className="text-slate-500 mt-2">Manage your promotional campaigns and matched influencers.</p>
                 </div>
-                <Button asChild className="gap-2 bg-primary">
-                    <Link href="/business/campaigns/new">
-                        <Plus className="h-4 w-4" />
-                        New Campaign
-                    </Link>
-                </Button>
+                <div className="flex items-center gap-3">
+                    {businesses.length > 1 && (
+                        <Select value={filter} onValueChange={setFilter}>
+                            <SelectTrigger className="w-[220px]" aria-label="Filter by business">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={ALL}>All businesses</SelectItem>
+                                {businesses.map(b => (
+                                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    <Button asChild className="gap-2 bg-primary">
+                        <Link href="/business/campaigns/new">
+                            <Plus className="h-4 w-4" />
+                            New Campaign
+                        </Link>
+                    </Button>
+                </div>
             </div>
 
-            {campaigns.length === 0 ? (
+            {error ? (
+                <Card className="p-8 text-center border-red-200 bg-red-50 text-red-700">{error}</Card>
+            ) : visible.length === 0 ? (
                 <Card className="flex flex-col items-center justify-center p-12 text-center border-dashed border-2">
                     <Ticket className="h-12 w-12 text-slate-300 mb-4" />
                     <h3 className="text-lg font-medium text-slate-900">No campaigns yet</h3>
                     <p className="text-sm text-slate-500 max-w-sm mt-1 mb-6">
-                        You haven't created any campaigns. Launch a new campaign to find and connect with influencers.
+                        You haven&apos;t created any campaigns{filter !== ALL ? " for this business" : ""}. Launch a new campaign to find and connect with influencers.
                     </p>
                     <Button asChild>
                         <Link href="/business/campaigns/new">Create Campaign</Link>
@@ -74,7 +119,7 @@ export default function BusinessCampaignsPage() {
                 </Card>
             ) : (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {campaigns.map((camp) => (
+                    {visible.map((camp) => (
                         <Card key={camp.id} className="flex flex-col">
                             <CardHeader>
                                 <div className="flex justify-between items-start">
@@ -83,6 +128,9 @@ export default function BusinessCampaignsPage() {
                                         {camp.status}
                                     </Badge>
                                 </div>
+                                {businesses.length > 1 && (
+                                    <p className="text-xs font-medium text-primary mt-1">{businessName(camp.business_id)}</p>
+                                )}
                                 <CardDescription className="line-clamp-2 mt-2">
                                     {camp.description || "No description provided."}
                                 </CardDescription>
@@ -92,6 +140,12 @@ export default function BusinessCampaignsPage() {
                                     <div className="flex flex-col">
                                         <span className="text-slate-500">Budget</span>
                                         <span className="font-medium">${(camp.budget_cents / 100).toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-slate-500">Fee / influencer</span>
+                                        <span className="font-medium">
+                                            {camp.influencer_fee_cents != null ? `$${(camp.influencer_fee_cents / 100).toFixed(2)}` : "Not set"}
+                                        </span>
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-slate-500">Radius</span>

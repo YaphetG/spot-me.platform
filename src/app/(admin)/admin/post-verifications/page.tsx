@@ -21,14 +21,21 @@ const STATUS_COLORS: Record<string, "default" | "secondary" | "destructive" | "o
     PENDING:        "secondary",
     AI_PASSED:      "default",
     AI_FAILED:      "destructive",
+    SCRAPE_FAILED:  "outline",
     ADMIN_APPROVED: "outline",
+    ADMIN_REJECTED: "destructive",
 };
 
+// These labels carry the distinction the whole pipeline exists to make. A post
+// that failed its checks and a post we could never fetch are different events,
+// and an admin approving the second one would be approving nothing at all.
 const STATUS_LABELS: Record<string, string> = {
-    PENDING:        "Pending AI",
-    AI_PASSED:      "AI Passed ✓",
-    AI_FAILED:      "AI Failed ✗",
+    PENDING:        "Needs review",
+    AI_PASSED:      "AI passed ✓",
+    AI_FAILED:      "Content failed ✗",
+    SCRAPE_FAILED:  "Could not fetch post",
     ADMIN_APPROVED: "Approved ✓",
+    ADMIN_REJECTED: "Rejected by admin",
 };
 
 export default function PostVerificationsPage() {
@@ -56,7 +63,7 @@ export default function PostVerificationsPage() {
         setActionLoading(id);
         try {
             await AdminService.approveSubmission(id);
-            toast.success("Submission approved!");
+            toast.success("Approved — the invite is now marked COMPLETED.");
             setSubmissions((prev) =>
                 prev.map((s) => s.id === id ? { ...s, verification_status: "ADMIN_APPROVED" } : s)
             );
@@ -73,7 +80,7 @@ export default function PostVerificationsPage() {
             await AdminService.rejectSubmission(id);
             toast.error("Submission rejected.");
             setSubmissions((prev) =>
-                prev.map((s) => s.id === id ? { ...s, verification_status: "AI_FAILED" } : s)
+                prev.map((s) => s.id === id ? { ...s, verification_status: "ADMIN_REJECTED" } : s)
             );
         } catch {
             toast.error("Failed to reject submission.");
@@ -85,10 +92,17 @@ export default function PostVerificationsPage() {
     // Stats
     const counts = {
         total: submissions.length,
-        pending: submissions.filter(s => s.verification_status === "PENDING").length,
-        aiPassed: submissions.filter(s => s.verification_status === "AI_PASSED").length,
-        aiFailed: submissions.filter(s => s.verification_status === "AI_FAILED").length,
+        // Anything a human still has to decide: machine-passed, still pending,
+        // or blocked because we could not fetch the post at all.
+        needsReview: submissions.filter(s =>
+            s.verification_status === "AI_PASSED" ||
+            s.verification_status === "PENDING" ||
+            s.verification_status === "SCRAPE_FAILED"
+        ).length,
         approved: submissions.filter(s => s.verification_status === "ADMIN_APPROVED").length,
+        failed: submissions.filter(s =>
+            s.verification_status === "AI_FAILED" || s.verification_status === "ADMIN_REJECTED"
+        ).length,
     };
 
     return (
@@ -114,9 +128,9 @@ export default function PostVerificationsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                     { label: "Total", value: counts.total, color: "text-foreground" },
-                    { label: "Awaiting Review", value: counts.aiPassed, color: "text-amber-500" },
+                    { label: "Needs Review", value: counts.needsReview, color: "text-amber-500" },
                     { label: "Approved", value: counts.approved, color: "text-green-600" },
-                    { label: "Rejected", value: counts.aiFailed, color: "text-red-500" },
+                    { label: "Failed / Rejected", value: counts.failed, color: "text-red-500" },
                 ].map((stat) => (
                     <Card key={stat.label}>
                         <CardContent className="pt-6 pb-4">
@@ -157,8 +171,13 @@ export default function PostVerificationsPage() {
                             <TableBody>
                                 {submissions.map((sub) => {
                                     const isActing = actionLoading === sub.id;
-                                    const canAct = sub.verification_status === "AI_PASSED" || sub.verification_status === "PENDING";
-                                    const llmNotes = (sub.scraped_data as Record<string, {llm_notes?: string}>)?.llm?.llm_notes;
+                                    const canAct =
+                                        sub.verification_status === "AI_PASSED" ||
+                                        sub.verification_status === "PENDING" ||
+                                        sub.verification_status === "AI_FAILED";
+                                    const report = sub.scraped_data ?? undefined;
+                                    const failedChecks = report?.deterministic?.failed_checks ?? [];
+                                    const llm = report?.llm;
 
                                     return (
                                         <TableRow key={sub.id}>
@@ -176,10 +195,61 @@ export default function PostVerificationsPage() {
                                                     <span className="truncate">{sub.submitted_url}</span>
                                                 </a>
                                             </TableCell>
-                                            <TableCell className="px-6 text-sm text-muted-foreground max-w-[200px]">
-                                                <span className="truncate block" title={llmNotes ?? "—"}>
-                                                    {llmNotes ?? "—"}
-                                                </span>
+                                            {/* Why, not just what. The old queue showed one
+                                                opaque note, so an admin approving a submission
+                                                had no idea what had actually been checked. */}
+                                            {/* A flex item defaults to min-width:auto, so the
+                                                long LLM reasoning refused to shrink and spilled
+                                                across the columns to its right. min-w-0 plus
+                                                break-words keeps it inside its cell. */}
+                                            {/* The width has to live on an inner block: a <td>
+                                                in an auto-layout table ignores max-width, so the
+                                                long LLM reasoning spilled across the columns to
+                                                its right. */}
+                                            {/* shadcn's TableCell hardcodes whitespace-nowrap, so
+                                                the long LLM reasoning could never wrap and ran
+                                                across the columns to its right. Override it and
+                                                give the content a real width to wrap inside. */}
+                                            <TableCell className="px-6 text-sm align-top whitespace-normal">
+                                                <div className="flex flex-col gap-1.5 w-[420px] break-words">
+                                                    {report?.reason && (
+                                                        <span className="text-muted-foreground">{report.reason}</span>
+                                                    )}
+
+                                                    {failedChecks.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {failedChecks.map((c) => (
+                                                                <Badge key={c} variant="destructive" className="text-[10px]">
+                                                                    {c}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {llm && !llm.available && (
+                                                        <span className="text-amber-600 text-xs">
+                                                            Subjective review did not run — human judgement required.
+                                                        </span>
+                                                    )}
+                                                    {llm?.available && llm.reasoning && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            AI: {llm.reasoning}
+                                                            {typeof llm.confidence === "number"
+                                                                ? ` (confidence ${(llm.confidence * 100).toFixed(0)}%)`
+                                                                : ""}
+                                                        </span>
+                                                    )}
+
+                                                    {report?.post?.degraded && (
+                                                        <span className="text-amber-600 text-xs font-medium">
+                                                            Synthetic data — not real evidence.
+                                                        </span>
+                                                    )}
+
+                                                    {!report && (
+                                                        <span className="text-muted-foreground">—</span>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="px-6">
                                                 <Badge variant={STATUS_COLORS[sub.verification_status] ?? "secondary"}>

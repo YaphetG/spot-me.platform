@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useRouter, useSearchParams } from "next/navigation";
-import { DefaultService } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-fetch";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,12 +19,17 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { DeliverablesEditor, emptyDeliverable, type Deliverable } from "@/components/deliverables-editor";
 import Link from "next/link";
 
 const formSchema = z.object({
     title: z.string().min(3, "Title must be at least 3 characters"),
     description: z.string().optional(),
     budget_dollars: z.coerce.number().min(1, "Budget must be at least $1"),
+    fee_dollars: z.coerce.number().min(1, "Fee must be at least $1"),
+}).refine(v => v.fee_dollars <= v.budget_dollars, {
+    message: "The fee per influencer cannot exceed the total budget",
+    path: ["fee_dollars"],
 });
 
 export default function NewCampaignPage() {
@@ -32,6 +37,9 @@ export default function NewCampaignPage() {
     const searchParams = useSearchParams();
     const businessId = searchParams.get("business_id");
     const [isLoading, setIsLoading] = useState(false);
+    // Deliverables live outside react-hook-form: they are a repeating structure
+    // edited in place, not a flat field, and zod validation adds nothing here.
+    const [deliverables, setDeliverables] = useState<Deliverable[]>([emptyDeliverable()]);
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -39,6 +47,7 @@ export default function NewCampaignPage() {
             title: "",
             description: "",
             budget_dollars: 100,
+            fee_dollars: 50,
         },
     });
 
@@ -50,18 +59,24 @@ export default function NewCampaignPage() {
 
         setIsLoading(true);
         try {
-            const campaign = await DefaultService.postCampaigns({
+            // apiSend rather than the generated client: that client is built
+            // from specs/, which predates influencer_fee_cents (issue M2).
+            const campaign = await apiSend<{ id: string }>("/campaigns", "POST", {
                 business_id: businessId,
                 title: values.title,
                 description: values.description || "",
-                budget_cents: values.budget_dollars * 100
+                budget_cents: Math.round(values.budget_dollars * 100),
+                influencer_fee_cents: Math.round(values.fee_dollars * 100),
+                // Drop rows the admin added but never filled in, so an empty
+                // deliverable cannot create an unsatisfiable requirement.
+                deliverables: deliverables.length > 0 ? deliverables : null,
             });
 
             toast.success("Campaign created!");
             router.push(`/admin/campaigns/${campaign.id}`);
         } catch (error) {
             console.error(error);
-            toast.error("Failed to create campaign");
+            toast.error(error instanceof Error ? error.message : "Failed to create campaign");
         } finally {
             setIsLoading(false);
         }
@@ -114,7 +129,11 @@ export default function NewCampaignPage() {
                                 <FormItem>
                                     <FormLabel>Description</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Brief details about the campaign..." {...field} />
+                                        <Textarea
+                                            rows={5}
+                                            placeholder="What is this campaign about? This is the subjective brief the AI review judges the post against."
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -134,6 +153,31 @@ export default function NewCampaignPage() {
                                 </FormItem>
                             )}
                         />
+
+                        <FormField
+                            control={form.control}
+                            name="fee_dollars"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Fee per influencer ($)</FormLabel>
+                                    <FormControl>
+                                        <Input type="number" placeholder="50" {...field} />
+                                    </FormControl>
+                                    <p className="text-xs text-muted-foreground">
+                                        Every invited influencer is offered this amount.
+                                    </p>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <div className="border-t pt-6">
+                            <DeliverablesEditor
+                                value={deliverables}
+                                onChange={setDeliverables}
+                                disabled={isLoading}
+                            />
+                        </div>
 
                         <div className="flex gap-4 pt-4">
                             <Button type="button" variant="outline" onClick={() => router.back()}>

@@ -1,3 +1,6 @@
+# Run from the monorepo root (paths like ./backend are relative to it):
+#   cp web-platform/docker-compose.yml . && docker compose up
+# or: docker compose -f web-platform/docker-compose.yml --project-directory . up
 version: '3.8'
 
 services:
@@ -14,6 +17,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   backend:
+    restart: unless-stopped
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -31,6 +35,7 @@ services:
       - POSTGRES_DB=spot_me
       - SECRET_KEY=${SECRET_KEY}
       - TEMPORAL_HOST=temporal:7233
+      - VLLM_BASE_URL=http://vllm:8000/v1
     depends_on:
       - db
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
@@ -53,12 +58,14 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=spot_me
       - TEMPORAL_HOST=temporal:7233
+      - VLLM_BASE_URL=http://vllm:8000/v1
     command: python -u -m src.worker.main
 
   # 2. Temporal UI (The Dashboard)
   temporal-ui:
     image: temporalio/ui:2.21.3
     container_name: spot_me_temporal_ui
+    restart: unless-stopped
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_CORS_ORIGINS=http://localhost:3000
@@ -69,6 +76,7 @@ services:
   temporal:
     image: temporalio/auto-setup:1.24.2
     container_name: spot_me_temporal
+    restart: unless-stopped
     environment:
       - DB=postgres12
       - DB_PORT=5432
@@ -81,5 +89,83 @@ services:
       - "7233:7233" # gRPC Port (For Python Code)
       - "8233:8233" # HTTP Port (For Temporal UI)
 
+  # Local LLM for the subjective half of proof-of-post verification.
+  #
+  # Two separate budgets constrain this service, and the second one is the
+  # reason for most of the flags:
+  #
+  # GPU  - RTX 2060 SUPER, Turing (compute 7.5), 8GB shared with the desktop.
+  #        Turing has no bfloat16 and no FlashAttention-2 (vLLM falls back to
+  #        xformers). That leaves an awkward gap for Gemma 3 specifically:
+  #        vLLM REFUSES float16 for gemma3 ("does not support float16. Reason:
+  #        Numerical instability"), and bfloat16 needs compute >= 8.0. So the
+  #        only dtype this model and this GPU agree on is float32, which
+  #        doubles the weights - 1B fp32 is ~4GB, which still fits, and is the
+  #        reason the 1B rather than the 4B is the model of choice here.
+  #
+  # HOST RAM - this machine has 16GB total and Docker Desktop's WSL2 VM gets
+  #        roughly half. vLLM's DEFAULT --swap-space is 4GB of *host* RAM, and
+  #        with the rest of the stack running that was enough to drive the VM
+  #        to zero free memory and wedge the Docker daemon entirely, requiring a
+  #        full Docker Desktop restart. (v0.28 removed the --swap-space flag, so
+  #        the mem_limit below is now the guard: if the model will not fit, the
+  #        container must die cleanly rather than take the machine with it.)
+  #
+  # Model: unsloth's mirror of google/gemma-3-1b-it. Google's own Gemma repos
+  # are gated behind a Hugging Face licence acceptance and need a HF token; the
+  # unsloth mirrors are ungated. The 4B variant (~3.3GB at 4-bit) fits in VRAM
+  # but not in the host RAM budget during load on this machine; the 1B fits at
+  # fp16 with room to spare and is a text-only Gemma3ForCausalLM, so no vision
+  # tower is loaded either.
+  vllm:
+    image: vllm/vllm-openai:v0.28.0
+    container_name: spot_me_vllm
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      # Turing has no FlashAttention-2, and vLLM's V1 default (TRITON_ATTN)
+      # asks for 80KB of shared memory per block against Turing's 64KB hardware
+      # limit, so it dies with triton OutOfResources. FLEX_ATTENTION is the
+      # remaining backend vLLM offers on this device. (XFORMERS is a V0 backend
+      # name and is silently ignored by the V1 engine.)
+      - VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND:-FLEX_ATTENTION}
+      - PYTHONUNBUFFERED=1
+      # WSL2 does not expose CUDA Unified Virtual Addressing, so vLLM's V1
+      # engine dies at startup with "UVA is not available" while allocating its
+      # UvaBuffer. This flag makes it use ordinary pinned memory instead.
+      # Required on Docker Desktop / WSL2; harmless on native Linux.
+      - VLLM_WSL2_ENABLE_PIN_MEMORY=1
+    ipc: host
+    # A hard ceiling. Without it, an over-large model does not fail - it
+    # exhausts the VM and hangs the Docker API for every other container.
+    mem_limit: 6g
+    command: >
+      --model ${VLLM_MODEL:-Qwen/Qwen3-1.7B}
+      --served-model-name ${VLLM_MODEL:-Qwen/Qwen3-1.7B}
+      --dtype float16
+      --gpu-memory-utilization 0.80
+      --max-model-len 2048
+      --max-num-seqs 2
+      --enforce-eager
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 900s
+
+
 volumes:
   postgres_data:
+  hf_cache:
