@@ -10,6 +10,7 @@ import { ArrowLeft, Ticket, MapPin, Users, Calendar, RefreshCw, Check, X } from 
 import Link from "next/link"
 import { toast } from "sonner"
 import { apiFetch, apiGet, apiSend } from "@/lib/api-fetch"
+import { PostsToReview } from "./posts-to-review"
 
 type InviteStatus =
     | "INVITED" | "INTERESTED" | "DECLINED" | "NEGOTIATING"
@@ -304,6 +305,12 @@ export default function CampaignDetailsPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <PostsToReview
+                campaignId={campaignId}
+                handles={Object.fromEntries(invites.map(i => [i.id, i.influencer.handle]))}
+                onDecided={loadInvites}
+            />
         </div>
     )
 }
