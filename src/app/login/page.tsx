@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import Link from "next/link";
 import { DefaultService } from "@/lib/api-client";
 import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
@@ -74,7 +75,7 @@ export default function LoginPage() {
                 <CardHeader className="space-y-1 text-center">
                     <CardTitle className="text-2xl font-bold tracking-tight">Login to Spot.me</CardTitle>
                     <CardDescription>
-                        Enter your admin credentials to access the ops dashboard.
+                        Sign in to your business or admin account.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -114,6 +115,12 @@ export default function LoginPage() {
                             </Button>
                         </form>
                     </Form>
+                    <p className="mt-6 text-center text-sm text-muted-foreground">
+                        New to Spot.me?{" "}
+                        <Link href="/signup" className="font-medium text-primary hover:underline">
+                            Create a business account
+                        </Link>
+                    </p>
                 </CardContent>
             </Card>
         </div>

@@ -21,7 +21,8 @@ interface AuthContextType {
     user: CurrentUser | null;
     isAuthenticated: boolean;
     isAdmin: boolean;
-    login: (token: string) => Promise<void>;
+    /** Store the session, then go to `redirectTo` (default: the role's home; null: stay). */
+    login: (token: string, redirectTo?: string | null) => Promise<void>;
     logout: () => void;
 }
 
@@ -102,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [isInitialized, token, user, pathname, router]);
 
     const login = useCallback(
-        async (newToken: string) => {
+        async (newToken: string, redirectTo?: string | null) => {
             OpenAPI.TOKEN = newToken;
             const me = await fetchCurrentUser(newToken);
             if (!me) {
@@ -112,7 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem(TOKEN_KEY, newToken);
             setToken(newToken);
             setUser(me);
-            router.push(homeForRole(me.role));
+            // null means the caller navigates itself (sign-up has more to do).
+            if (redirectTo !== null) router.push(redirectTo ?? homeForRole(me.role));
         },
         [router]
     );

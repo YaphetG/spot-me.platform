@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { apiSend } from "@/lib/api-fetch"
 import { fetchMyBusinesses, type MyBusiness } from "@/lib/businesses"
+import { FirstLocationForm } from "@/components/first-location-form"
 import {
     Select,
     SelectContent,
@@ -24,6 +25,7 @@ export default function BusinessProfilePage() {
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [saving, setSaving] = useState(false)
+    const [reloadKey, setReloadKey] = useState(0)
     const [formData, setFormData] = useState({
         name: "",
         description: "",
@@ -45,7 +47,7 @@ export default function BusinessProfilePage() {
             }
         }
         fetchBusiness()
-    }, [])
+    }, [reloadKey])
 
     const selectBusiness = (b: MyBusiness) => {
         setBusiness(b)
@@ -87,16 +89,39 @@ export default function BusinessProfilePage() {
         )
     }
 
-    if (!business) {
+    if (loadError) {
         return (
             <div className="w-full max-w-2xl mx-auto">
                 <Card className="border-red-200 bg-red-50">
                     <CardHeader>
                         <CardTitle className="text-red-800">No Business Found</CardTitle>
-                        <CardDescription className="text-red-600">
-                            {loadError ?? "No business is linked to this account yet."}
+                        <CardDescription className="text-red-600">{loadError}</CardDescription>
+                    </CardHeader>
+                </Card>
+            </div>
+        )
+    }
+
+    if (!business) {
+        // e.g. sign-up created the account but saving its location failed.
+        return (
+            <div className="w-full max-w-2xl mx-auto">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Finish setting up your business</CardTitle>
+                        <CardDescription>
+                            Your account is ready, but it has no location yet. Add your first
+                            location so you can create campaigns and find influencers nearby.
                         </CardDescription>
                     </CardHeader>
+                    <CardContent>
+                        <FirstLocationForm
+                            onCreated={() => {
+                                setLoading(true)
+                                setReloadKey(k => k + 1)
+                            }}
+                        />
+                    </CardContent>
                 </Card>
             </div>
         )
