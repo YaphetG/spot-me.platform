@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { LayoutDashboard, Users, UserPlus, FileCheck2 } from "lucide-react"
+import { LayoutDashboard, Users, UserPlus, FileCheck2, BadgeCheck } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { LogoutButton } from "@/components/logout-button"
@@ -52,6 +52,13 @@ export default function AdminLayout({
                     >
                         <FileCheck2 className="h-4 w-4" />
                         Post Verifications
+                    </Link>
+                    <Link
+                        href="/admin/business-verifications"
+                        className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
+                    >
+                        <BadgeCheck className="h-4 w-4" />
+                        Business Verifications
                     </Link>
                     <Link
                         href="/admin/influencers/new"
