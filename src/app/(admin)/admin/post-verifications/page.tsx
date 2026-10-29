@@ -2,10 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { AdminService } from "@/lib/api-client";
-import { ProofOfPostSubmission } from "@/lib/api-client/models/ProofOfPostSubmission";
+import type {
+    AdminAction,
+    ProofOfPostSubmission,
+} from "@/lib/api-client/models/ProofOfPostSubmission";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import {
     Table,
     TableBody,
@@ -15,33 +19,60 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, ExternalLink, Loader2, RefreshCw, FileCheck2 } from "lucide-react";
+import { Send, Undo2, ExternalLink, Loader2, RefreshCw, FileCheck2 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    PENDING:        "secondary",
-    AI_PASSED:      "default",
-    AI_FAILED:      "destructive",
-    SCRAPE_FAILED:  "outline",
-    ADMIN_APPROVED: "outline",
-    ADMIN_REJECTED: "destructive",
+    PENDING:           "secondary",
+    AI_PASSED:         "default",
+    AI_FAILED:         "destructive",
+    SCRAPE_FAILED:     "outline",
+    AWAITING_BUSINESS: "secondary",
+    BUSINESS_APPROVED: "outline",
+    BUSINESS_REJECTED: "destructive",
+    ADMIN_APPROVED:    "outline",
+    ADMIN_REJECTED:    "destructive",
 };
 
 // These labels carry the distinction the whole pipeline exists to make. A post
 // that failed its checks and a post we could never fetch are different events,
-// and an admin approving the second one would be approving nothing at all.
+// and an admin sending the second one to a business would be sending nothing.
 const STATUS_LABELS: Record<string, string> = {
-    PENDING:        "Needs review",
-    AI_PASSED:      "AI passed ✓",
-    AI_FAILED:      "Content failed ✗",
-    SCRAPE_FAILED:  "Could not fetch post",
-    ADMIN_APPROVED: "Approved ✓",
-    ADMIN_REJECTED: "Rejected by admin",
+    PENDING:           "Needs a human",
+    AI_PASSED:         "AI passed ✓",
+    AI_FAILED:         "Content failed ✗",
+    SCRAPE_FAILED:     "Could not fetch post",
+    AWAITING_BUSINESS: "With business",
+    BUSINESS_APPROVED: "Business approved ✓",
+    BUSINESS_REJECTED: "Disputed by business",
+    ADMIN_APPROVED:    "Approved ✓",
+    ADMIN_REJECTED:    "Rejected by admin",
 };
+
+type Tab = "ai" | "disputed";
+
+// "AI no" (M30): a content failure, a failed fetch, or a PENDING submission
+// whose verdict came back "needs a human" (e.g. the LLM could not run).
+// A PENDING submission with no verdict yet is still being verified.
+function isAiCouldNotPass(sub: ProofOfPostSubmission): boolean {
+    if (sub.verification_status === "AI_FAILED" || sub.verification_status === "SCRAPE_FAILED") {
+        return true;
+    }
+    return (
+        sub.verification_status === "PENDING" &&
+        sub.scraped_data?.verdict?.toUpperCase() === "NEEDS_HUMAN"
+    );
+}
+
+function isDisputed(sub: ProofOfPostSubmission): boolean {
+    return sub.verification_status === "BUSINESS_REJECTED";
+}
 
 export default function PostVerificationsPage() {
     const [submissions, setSubmissions] = useState<ProofOfPostSubmission[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [tab, setTab] = useState<Tab>("ai");
+    const [notes, setNotes] = useState<Record<string, string>>({});
 
     const fetchSubmissions = useCallback(async () => {
         setLoading(true);
@@ -59,50 +90,44 @@ export default function PostVerificationsPage() {
         fetchSubmissions();
     }, [fetchSubmissions]);
 
-    const handleApprove = async (id: string) => {
+    const handleAction = async (id: string, action: AdminAction) => {
+        const note = (notes[id] ?? "").trim();
+        if (action === "RETURN_TO_INFLUENCER" && !note) {
+            toast.error("Add a note for the influencer before returning the post.");
+            return;
+        }
         setActionLoading(id);
         try {
-            await AdminService.approveSubmission(id);
-            toast.success("Approved — the invite is now marked COMPLETED.");
-            setSubmissions((prev) =>
-                prev.map((s) => s.id === id ? { ...s, verification_status: "ADMIN_APPROVED" } : s)
+            // POST /submissions/{id}/admin-action
+            await AdminService.adminAction(id, { action, note: note || undefined });
+            toast.success(
+                action === "SEND_TO_BUSINESS"
+                    ? "Sent to the business for review."
+                    : "Returned to the influencer with your note."
             );
+            // Either way the submission leaves the mediation queue.
+            setSubmissions((prev) => prev.filter((s) => s.id !== id));
+            setNotes((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
         } catch {
-            toast.error("Failed to approve submission.");
+            toast.error("Failed to update submission.");
         } finally {
             setActionLoading(null);
         }
     };
 
-    const handleReject = async (id: string) => {
-        setActionLoading(id);
-        try {
-            await AdminService.rejectSubmission(id);
-            toast.error("Submission rejected.");
-            setSubmissions((prev) =>
-                prev.map((s) => s.id === id ? { ...s, verification_status: "ADMIN_REJECTED" } : s)
-            );
-        } catch {
-            toast.error("Failed to reject submission.");
-        } finally {
-            setActionLoading(null);
-        }
-    };
+    const aiQueue = submissions.filter(isAiCouldNotPass);
+    const disputedQueue = submissions.filter(isDisputed);
+    const visible = tab === "ai" ? aiQueue : disputedQueue;
 
-    // Stats
     const counts = {
         total: submissions.length,
-        // Anything a human still has to decide: machine-passed, still pending,
-        // or blocked because we could not fetch the post at all.
-        needsReview: submissions.filter(s =>
-            s.verification_status === "AI_PASSED" ||
-            s.verification_status === "PENDING" ||
-            s.verification_status === "SCRAPE_FAILED"
-        ).length,
-        approved: submissions.filter(s => s.verification_status === "ADMIN_APPROVED").length,
-        failed: submissions.filter(s =>
-            s.verification_status === "AI_FAILED" || s.verification_status === "ADMIN_REJECTED"
-        ).length,
+        aiCouldNotPass: aiQueue.length,
+        disputed: disputedQueue.length,
+        withBusiness: submissions.filter(s => s.verification_status === "AWAITING_BUSINESS").length,
     };
 
     return (
@@ -114,7 +139,8 @@ export default function PostVerificationsPage() {
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">Post Verifications</h1>
                         <p className="text-sm text-muted-foreground mt-0.5">
-                            Review influencer campaign post submissions
+                            Mediate proof-of-post submissions. The business decides; you send a
+                            post on to the business or return it to the influencer.
                         </p>
                     </div>
                 </div>
@@ -128,9 +154,9 @@ export default function PostVerificationsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                     { label: "Total", value: counts.total, color: "text-foreground" },
-                    { label: "Needs Review", value: counts.needsReview, color: "text-amber-500" },
-                    { label: "Approved", value: counts.approved, color: "text-green-600" },
-                    { label: "Failed / Rejected", value: counts.failed, color: "text-red-500" },
+                    { label: "AI Could Not Pass", value: counts.aiCouldNotPass, color: "text-amber-500" },
+                    { label: "Disputed by Business", value: counts.disputed, color: "text-red-500" },
+                    { label: "With Business", value: counts.withBusiness, color: "text-blue-600" },
                 ].map((stat) => (
                     <Card key={stat.label}>
                         <CardContent className="pt-6 pb-4">
@@ -141,20 +167,42 @@ export default function PostVerificationsPage() {
                 ))}
             </div>
 
+            {/* Tabs */}
+            <div className="flex gap-2" role="tablist">
+                {([
+                    { key: "ai", label: "AI could not pass", count: counts.aiCouldNotPass },
+                    { key: "disputed", label: "Disputed by business", count: counts.disputed },
+                ] as const).map((t) => (
+                    <Button
+                        key={t.key}
+                        role="tab"
+                        aria-selected={tab === t.key}
+                        variant={tab === t.key ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setTab(t.key)}
+                    >
+                        {t.label}
+                        <Badge variant="secondary" className="ml-2">{t.count}</Badge>
+                    </Button>
+                ))}
+            </div>
+
             {/* Submissions Table */}
             <Card>
                 <CardHeader className="border-b py-4">
-                    <CardTitle className="text-base">Submission Queue</CardTitle>
+                    <CardTitle className="text-base">
+                        {tab === "ai" ? "AI could not pass" : "Disputed by business"}
+                    </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                     {loading ? (
                         <div className="flex justify-center items-center p-16">
                             <Loader2 className="animate-spin h-7 w-7 text-primary" />
                         </div>
-                    ) : submissions.length === 0 ? (
+                    ) : visible.length === 0 ? (
                         <div className="flex flex-col items-center justify-center p-16 text-muted-foreground gap-2">
                             <FileCheck2 className="h-10 w-10 opacity-20" />
-                            <p>No submissions found.</p>
+                            <p>Nothing to mediate here.</p>
                         </div>
                     ) : (
                         <Table>
@@ -162,29 +210,28 @@ export default function PostVerificationsPage() {
                                 <TableRow className="hover:bg-transparent">
                                     <TableHead className="px-6">Invite ID</TableHead>
                                     <TableHead className="px-6">Post URL</TableHead>
-                                    <TableHead className="px-6">AI Result</TableHead>
+                                    <TableHead className="px-6">
+                                        {tab === "ai" ? "AI Result" : "Business's Reason"}
+                                    </TableHead>
                                     <TableHead className="px-6">Status</TableHead>
                                     <TableHead className="px-6">Submitted</TableHead>
-                                    <TableHead className="text-right px-6">Actions</TableHead>
+                                    <TableHead className="px-6">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {submissions.map((sub) => {
+                                {visible.map((sub) => {
                                     const isActing = actionLoading === sub.id;
-                                    const canAct =
-                                        sub.verification_status === "AI_PASSED" ||
-                                        sub.verification_status === "PENDING" ||
-                                        sub.verification_status === "AI_FAILED";
+                                    const note = notes[sub.id] ?? "";
                                     const report = sub.scraped_data ?? undefined;
                                     const failedChecks = report?.deterministic?.failed_checks ?? [];
                                     const llm = report?.llm;
 
                                     return (
                                         <TableRow key={sub.id}>
-                                            <TableCell className="px-6 font-mono text-xs text-muted-foreground">
+                                            <TableCell className="px-6 font-mono text-xs text-muted-foreground align-top">
                                                 {sub.invite_id.slice(0, 8)}…
                                             </TableCell>
-                                            <TableCell className="px-6 max-w-[200px]">
+                                            <TableCell className="px-6 max-w-[200px] align-top">
                                                 <a
                                                     href={sub.submitted_url}
                                                     target="_blank"
@@ -195,103 +242,109 @@ export default function PostVerificationsPage() {
                                                     <span className="truncate">{sub.submitted_url}</span>
                                                 </a>
                                             </TableCell>
-                                            {/* Why, not just what. The old queue showed one
-                                                opaque note, so an admin approving a submission
-                                                had no idea what had actually been checked. */}
-                                            {/* A flex item defaults to min-width:auto, so the
-                                                long LLM reasoning refused to shrink and spilled
-                                                across the columns to its right. min-w-0 plus
-                                                break-words keeps it inside its cell. */}
-                                            {/* The width has to live on an inner block: a <td>
-                                                in an auto-layout table ignores max-width, so the
-                                                long LLM reasoning spilled across the columns to
-                                                its right. */}
                                             {/* shadcn's TableCell hardcodes whitespace-nowrap, so
                                                 the long LLM reasoning could never wrap and ran
                                                 across the columns to its right. Override it and
                                                 give the content a real width to wrap inside. */}
                                             <TableCell className="px-6 text-sm align-top whitespace-normal">
-                                                <div className="flex flex-col gap-1.5 w-[420px] break-words">
-                                                    {report?.reason && (
-                                                        <span className="text-muted-foreground">{report.reason}</span>
-                                                    )}
+                                                <div className="flex flex-col gap-1.5 w-[380px] break-words">
+                                                    {tab === "disputed" ? (
+                                                        // Admin-only: the influencer never sees
+                                                        // the business's reason directly.
+                                                        sub.business_rejection_reason ? (
+                                                            <span>{sub.business_rejection_reason}</span>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">No reason given.</span>
+                                                        )
+                                                    ) : (
+                                                        <>
+                                                            {report?.reason && (
+                                                                <span className="text-muted-foreground">{report.reason}</span>
+                                                            )}
 
-                                                    {failedChecks.length > 0 && (
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {failedChecks.map((c) => (
-                                                                <Badge key={c} variant="destructive" className="text-[10px]">
-                                                                    {c}
-                                                                </Badge>
-                                                            ))}
-                                                        </div>
-                                                    )}
+                                                            {failedChecks.length > 0 && (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {failedChecks.map((c) => (
+                                                                        <Badge key={c} variant="destructive" className="text-[10px]">
+                                                                            {c}
+                                                                        </Badge>
+                                                                    ))}
+                                                                </div>
+                                                            )}
 
-                                                    {llm && !llm.available && (
-                                                        <span className="text-amber-600 text-xs">
-                                                            Subjective review did not run — human judgement required.
-                                                        </span>
-                                                    )}
-                                                    {llm?.available && llm.reasoning && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            AI: {llm.reasoning}
-                                                            {typeof llm.confidence === "number"
-                                                                ? ` (confidence ${(llm.confidence * 100).toFixed(0)}%)`
-                                                                : ""}
-                                                        </span>
-                                                    )}
+                                                            {llm && !llm.available && (
+                                                                <span className="text-amber-600 text-xs">
+                                                                    Subjective review did not run — human judgement required.
+                                                                </span>
+                                                            )}
+                                                            {llm?.available && llm.reasoning && (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    AI: {llm.reasoning}
+                                                                    {typeof llm.confidence === "number"
+                                                                        ? ` (confidence ${(llm.confidence * 100).toFixed(0)}%)`
+                                                                        : ""}
+                                                                </span>
+                                                            )}
 
-                                                    {report?.post?.degraded && (
-                                                        <span className="text-amber-600 text-xs font-medium">
-                                                            Synthetic data — not real evidence.
-                                                        </span>
-                                                    )}
+                                                            {report?.post?.degraded && (
+                                                                <span className="text-amber-600 text-xs font-medium">
+                                                                    Synthetic data — not real evidence.
+                                                                </span>
+                                                            )}
 
-                                                    {!report && (
-                                                        <span className="text-muted-foreground">—</span>
+                                                            {!report && (
+                                                                <span className="text-muted-foreground">—</span>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="px-6">
+                                            <TableCell className="px-6 align-top">
                                                 <Badge variant={STATUS_COLORS[sub.verification_status] ?? "secondary"}>
                                                     {STATUS_LABELS[sub.verification_status] ?? sub.verification_status}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="px-6 text-sm text-muted-foreground">
+                                            <TableCell className="px-6 text-sm text-muted-foreground align-top">
                                                 {sub.created_at
                                                     ? new Date(sub.created_at as string).toLocaleDateString()
                                                     : "—"}
                                             </TableCell>
-                                            <TableCell className="text-right px-6">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    {sub.verification_status === "ADMIN_APPROVED" ? (
-                                                        <span className="text-xs text-green-600 font-medium">Approved</span>
-                                                    ) : canAct ? (
-                                                        <>
-                                                            <Button
-                                                                size="sm"
-                                                                disabled={isActing}
-                                                                onClick={() => handleApprove(sub.id)}
-                                                                className="bg-green-600 hover:bg-green-700 text-white h-8"
-                                                            >
-                                                                {isActing ? (
-                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                ) : (
-                                                                    <><CheckCircle className="h-3.5 w-3.5 mr-1" /> Approve</>
-                                                                )}
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                disabled={isActing}
-                                                                onClick={() => handleReject(sub.id)}
-                                                                className="border-red-200 text-red-600 hover:bg-red-50 h-8"
-                                                            >
-                                                                <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
-                                                            </Button>
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">No action</span>
-                                                    )}
+                                            <TableCell className="px-6 align-top whitespace-normal">
+                                                <div className="flex flex-col gap-2 w-[260px]">
+                                                    <Textarea
+                                                        value={note}
+                                                        disabled={isActing}
+                                                        placeholder="Note (optional to send to business, required to return to influencer)"
+                                                        aria-label="Mediation note"
+                                                        className="text-xs min-h-14"
+                                                        onChange={(e) =>
+                                                            setNotes((prev) => ({ ...prev, [sub.id]: e.target.value }))
+                                                        }
+                                                    />
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            disabled={isActing}
+                                                            onClick={() => handleAction(sub.id, "SEND_TO_BUSINESS")}
+                                                            className="h-8"
+                                                        >
+                                                            {isActing ? (
+                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                            ) : (
+                                                                <><Send className="h-3.5 w-3.5 mr-1" /> Send to business</>
+                                                            )}
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={isActing || !note.trim()}
+                                                            title={note.trim() ? undefined : "A note is required"}
+                                                            onClick={() => handleAction(sub.id, "RETURN_TO_INFLUENCER")}
+                                                            className="h-8"
+                                                        >
+                                                            <Undo2 className="h-3.5 w-3.5 mr-1" /> Return to influencer
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
