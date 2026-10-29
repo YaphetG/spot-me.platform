@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { OpenAPI } from "@/lib/api-client/core/OpenAPI";
+import "@/lib/api-config";
 import { useRouter, usePathname } from "next/navigation";
 
 const TOKEN_KEY = "spotme_admin_token";

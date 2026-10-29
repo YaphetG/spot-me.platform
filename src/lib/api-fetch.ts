@@ -1,4 +1,5 @@
 import { OpenAPI } from "@/lib/api-client/core/OpenAPI";
+import "@/lib/api-config";
 
 /**
  * Authenticated fetch against the API.
