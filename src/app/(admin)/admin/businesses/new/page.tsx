@@ -18,15 +18,15 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
-import { ArrowLeft, Loader2, MapPin } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { LocationFields } from "@/components/location-fields";
+import { coordinatesSchema } from "@/lib/location";
 
-const formSchema = z.object({
+const formSchema = coordinatesSchema.extend({
     name: z.string().min(2, "Name must be at least 2 characters"),
     description: z.string().optional(),
     website: z.string().optional(),
-    latitude: z.coerce.number().min(-90).max(90),
-    longitude: z.coerce.number().min(-180).max(180),
 });
 
 export default function NewBusinessPage() {
@@ -43,12 +43,6 @@ export default function NewBusinessPage() {
             longitude: 0,
         },
     });
-
-    const handleUseRaleighCenter = () => {
-        form.setValue("latitude", 35.7718);
-        form.setValue("longitude", -78.6406);
-        toast.info("Using Raleigh Center coordinates");
-    };
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsLoading(true);
@@ -143,39 +137,7 @@ export default function NewBusinessPage() {
                         )}
                     />
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                            control={form.control}
-                            name="latitude"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Latitude</FormLabel>
-                                    <FormControl>
-                                        <Input type="number" step="any" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="longitude"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Longitude</FormLabel>
-                                    <FormControl>
-                                        <Input type="number" step="any" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-
-                    <Button type="button" variant="secondary" onClick={handleUseRaleighCenter} className="w-full">
-                        <MapPin className="mr-2 h-4 w-4" />
-                        Use Raleigh Center (35.7718, -78.6406)
-                    </Button>
+                    <LocationFields />
 
                     <div className="flex gap-4 pt-4">
                         <Button type="button" variant="outline" onClick={() => router.back()}>
