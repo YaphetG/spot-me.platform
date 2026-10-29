@@ -6,10 +6,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Ticket, MapPin, Users, Calendar, RefreshCw, Check, X } from "lucide-react"
+import { ArrowLeft, Ticket, MapPin, Users, Calendar, RefreshCw, Check, X, Clock, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { apiFetch, apiGet, apiSend } from "@/lib/api-fetch"
+import { apiFetch, apiGet, apiSend, toError } from "@/lib/api-fetch"
+import { BusinessVerificationDialog } from "@/components/business-verification-dialog"
+import {
+    fetchBusinessVerification,
+    isBusinessNotVerified,
+    type BusinessVerification,
+} from "@/lib/business-verification"
 
 type InviteStatus =
     | "INVITED" | "INTERESTED" | "DECLINED" | "NEGOTIATING"
@@ -55,6 +61,10 @@ export default function CampaignDetailsPage() {
     const [invitesError, setInvitesError] = useState<string | null>(null)
     // Invite id with a decision in flight, so its buttons can't be double-clicked.
     const [deciding, setDeciding] = useState<string | null>(null)
+    // Launch is gated on a verified business (M26). Null when the status
+    // could not be loaded; launch then finds out from the API's 409.
+    const [verification, setVerification] = useState<BusinessVerification | null>(null)
+    const [verifyOpen, setVerifyOpen] = useState(false)
 
     const loadInvites = useCallback(async () => {
         try {
@@ -98,19 +108,63 @@ export default function CampaignDetailsPage() {
         fetchDetails()
     }, [campaignId, loadInvites])
 
+    const loadVerification = useCallback(async () => {
+        try {
+            // GET /businesses/verification
+            setVerification(await fetchBusinessVerification())
+        } catch (err) {
+            console.error("Failed to load business verification", err)
+        }
+    }, [])
 
-    const handleLaunch = async () => {
-        if (!campaignId) return;
+    useEffect(() => {
+        loadVerification()
+    }, [loadVerification])
 
+
+    const launch = async () => {
         try {
             // Launch with no invites; influencers are invited afterwards. Any
             // invites staged while the campaign was a draft go out now.
-            await apiSend(`/campaigns/${campaignId}/launch`, "POST", { influencer_ids: [] })
+            const res = await apiFetch(`/campaigns/${campaignId}/launch`, {
+                method: "POST",
+                body: JSON.stringify({ influencer_ids: [] }),
+            })
+            // 409 business_not_verified: the status we loaded was stale or
+            // missing. Ask for the registration details.
+            if (await isBusinessNotVerified(res)) {
+                await loadVerification()
+                setVerifyOpen(true)
+                return
+            }
+            if (!res.ok) throw await toError(res)
             setCampaign(c => c && { ...c, status: "ACTIVE" })
             await loadInvites()
             toast.success("Campaign launched. It is now active.")
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Could not launch the campaign.")
+        }
+    }
+
+    const handleLaunch = async () => {
+        if (!campaignId) return;
+
+        // First launch of an unverified business: collect its registration
+        // details instead of letting the API refuse.
+        if (verification && verification.status !== "VERIFIED") {
+            setVerifyOpen(true)
+            return
+        }
+        await launch()
+    }
+
+    const handleVerificationSubmitted = async (v: BusinessVerification) => {
+        setVerification(v)
+        setVerifyOpen(false)
+        if (v.status === "VERIFIED") {
+            await launch()
+        } else {
+            toast.success("Details submitted. You can launch once they're approved.")
         }
     }
 
@@ -179,10 +233,52 @@ export default function CampaignDetailsPage() {
 
                 {campaign.status === "DRAFT" && (
                     <div className="ml-auto">
-                        <Button className="bg-primary" onClick={handleLaunch}>Launch Campaign</Button>
+                        <Button
+                            className="bg-primary"
+                            onClick={handleLaunch}
+                            disabled={verification?.status === "PENDING"}
+                        >
+                            Launch Campaign
+                        </Button>
                     </div>
                 )}
             </div>
+
+            {campaign.status === "DRAFT" && verification?.status === "PENDING" && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+                    <Clock className="h-5 w-5 shrink-0 text-amber-600" />
+                    <div>
+                        <p className="font-medium text-amber-900">Under review</p>
+                        <p className="text-amber-800">
+                            We&apos;re checking your business registration details. You can launch
+                            once they&apos;re approved; until then you can keep editing this draft.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {campaign.status === "DRAFT" && verification?.status === "REJECTED" && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm">
+                    <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
+                    <div className="flex-1">
+                        <p className="font-medium text-red-900">
+                            Rejected: {verification.rejection_reason || "no reason given"}
+                        </p>
+                        <p className="text-red-800">
+                            Correct your registration details and resubmit them to launch.
+                        </p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setVerifyOpen(true)}>
+                        Resubmit
+                    </Button>
+                </div>
+            )}
+
+            <BusinessVerificationDialog
+                open={verifyOpen}
+                onOpenChange={setVerifyOpen}
+                onSubmitted={handleVerificationSubmitted}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Main Details */}

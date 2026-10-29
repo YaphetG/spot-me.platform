@@ -47,7 +47,8 @@ export async function apiSend<T>(
     return (await res.json()) as T;
 }
 
-async function toError(res: Response): Promise<Error> {
+/** An Error carrying the API's error detail from a failed response. */
+export async function toError(res: Response): Promise<Error> {
     let detail = `Request failed (${res.status})`;
     try {
         const body = await res.json();
