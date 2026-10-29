@@ -118,10 +118,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     const logout = useCallback(() => {
+        // Clear the API client's token first so no further request carries it.
+        OpenAPI.TOKEN = undefined;
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
         setUser(null);
-        OpenAPI.TOKEN = undefined;
         router.push("/login");
     }, [router]);
 
