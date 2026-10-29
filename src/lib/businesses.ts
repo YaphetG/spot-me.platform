@@ -13,6 +13,10 @@ export interface MyBusiness {
     name: string;
     description: string | null;
     website: string | null;
+    /** Position and radius, when the API includes them (M27). */
+    latitude?: number | null;
+    longitude?: number | null;
+    service_radius_meters?: number | null;
 }
 
 export function fetchMyBusinesses(): Promise<MyBusiness[]> {
