@@ -16,6 +16,7 @@ import {
     isBusinessNotVerified,
     type BusinessVerification,
 } from "@/lib/business-verification"
+import { PostsToReview } from "./posts-to-review"
 
 type InviteStatus =
     | "INVITED" | "INTERESTED" | "DECLINED" | "NEGOTIATING"
@@ -400,6 +401,12 @@ export default function CampaignDetailsPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <PostsToReview
+                campaignId={campaignId}
+                handles={Object.fromEntries(invites.map(i => [i.id, i.influencer.handle]))}
+                onDecided={loadInvites}
+            />
         </div>
     )
 }

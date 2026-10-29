@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Building2, Ticket, Users } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { PostsAwaitingBadge } from "./posts-awaiting-badge"
 
 export default function BusinessDashboardPage() {
     return (
@@ -12,6 +13,7 @@ export default function BusinessDashboardPage() {
                     <p className="text-slate-500 mt-2">Welcome to your Spot.me Business Portal. Manage your profile and campaigns here.</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <PostsAwaitingBadge />
                     <Button asChild className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground">
                         <Link href="/business/campaigns/new">
                             <Ticket className="h-4 w-4" />
