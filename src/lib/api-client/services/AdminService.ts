@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AdminActionRequest, ProofOfPostSubmission } from '../models/ProofOfPostSubmission';
 import type { CreateInfluencerManualRequest } from '../models/CreateInfluencerManualRequest';
 import type { InfluencerRead } from '../models/InfluencerRead';
 import type { UUID } from '../models/UUID';
@@ -86,25 +87,22 @@ export class AdminService {
         });
     }
     /**
-     * Admin approves a submission
+     * Admin mediates a submission: send it on to the business, or return it
+     * to the influencer with a note. The admin never approves on the
+     * business's behalf (M30).
      * @param submissionId
+     * @param requestBody
      */
-    public static approveSubmission(submissionId: string): CancelablePromise<Record<string, unknown>> {
+    public static adminAction(
+        submissionId: string,
+        requestBody: AdminActionRequest,
+    ): CancelablePromise<ProofOfPostSubmission> {
         return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/submissions/{submission_id}/approve',
+            method: 'POST',
+            url: '/submissions/{submission_id}/admin-action',
             path: { 'submission_id': submissionId },
-        });
-    }
-    /**
-     * Admin rejects a submission
-     * @param submissionId
-     */
-    public static rejectSubmission(submissionId: string): CancelablePromise<Record<string, unknown>> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/submissions/{submission_id}/reject',
-            path: { 'submission_id': submissionId },
+            body: requestBody,
+            mediaType: 'application/json',
         });
     }
 }
