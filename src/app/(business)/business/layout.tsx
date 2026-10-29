@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { LayoutDashboard, Building2, Ticket } from "lucide-react"
 
+import { LogoutButton } from "@/components/logout-button"
+
 export default function BusinessLayout({
     children,
 }: {
@@ -38,6 +40,9 @@ export default function BusinessLayout({
                         Campaigns
                     </Link>
                 </nav>
+                <div className="mt-auto">
+                    <LogoutButton />
+                </div>
             </aside>
             <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-64">
                 <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-white px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 shadow-sm">
