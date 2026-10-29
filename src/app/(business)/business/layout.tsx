@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { LayoutDashboard, Building2, Ticket } from "lucide-react"
+import { LayoutDashboard, Building2, MapPin, Ticket } from "lucide-react"
 
 import { LogoutButton } from "@/components/logout-button"
 
@@ -31,6 +31,13 @@ export default function BusinessLayout({
                     >
                         <Building2 className="h-4 w-4" />
                         Business Profile
+                    </Link>
+                    <Link
+                        href="/business/locations"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900"
+                    >
+                        <MapPin className="h-4 w-4" />
+                        Locations
                     </Link>
                     <Link
                         href="/business/campaigns"
