@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { AdminService } from "@/lib/api-client"
+import { manualAddInfluencer } from "@/lib/influencer-invites"
 import { Button } from "@/components/ui/button"
 import {
     Form,
@@ -31,7 +31,7 @@ const formSchema = z.object({
     platform: z.enum(["INSTAGRAM", "TIKTOK"]),
     latitude: z.coerce.number().min(-90).max(90),
     longitude: z.coerce.number().min(-180).max(180),
-    user_id: z.string().uuid({ message: "Invalid UUID format" }),
+    email: z.string().email({ message: "Enter the influencer's email address." }),
 })
 
 export default function ManualEntryPage() {
@@ -42,24 +42,20 @@ export default function ManualEntryPage() {
             platform: "INSTAGRAM",
             latitude: 0,
             longitude: 0,
-            user_id: "",
+            email: "",
         },
     })
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         try {
-            await AdminService.postInfluencersManualAdd({
-                handle: values.handle,
-                platform: values.platform,
-                latitude: values.latitude,
-                longitude: values.longitude,
-                user_id: values.user_id,
-            })
-            toast.success("Influencer added successfully")
+            await manualAddInfluencer(values)
+            toast.success(`Invite sent to ${values.email}`)
             form.reset()
         } catch (error) {
             console.error(error)
-            toast.error("Failed to add influencer")
+            toast.error("Failed to add influencer", {
+                description: error instanceof Error ? error.message : undefined,
+            })
         }
     }
 
@@ -142,15 +138,15 @@ export default function ManualEntryPage() {
 
                     <FormField
                         control={form.control}
-                        name="user_id"
+                        name="email"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>User UUID</FormLabel>
+                                <FormLabel>Email</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="00000000-0000-0000-0000-000000000000" {...field} />
+                                    <Input type="email" placeholder="creator@example.com" {...field} />
                                 </FormControl>
                                 <FormDescription>
-                                    UUID of the user to owns this influencer profile.
+                                    The influencer gets an email with a link to set their password.
                                 </FormDescription>
                                 <FormMessage />
                             </FormItem>

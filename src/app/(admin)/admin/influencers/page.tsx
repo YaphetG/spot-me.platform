@@ -13,7 +13,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
-import { Check, X, ShieldAlert, ShieldCheck } from "lucide-react"
+import { Check, X, ShieldAlert, ShieldCheck, Mail } from "lucide-react"
+import { resendInfluencerInvite } from "@/lib/influencer-invites"
 
 export default function InfluencersPage() {
     const [influencers, setInfluencers] = useState<InfluencerRead[]>([])
@@ -62,7 +63,19 @@ export default function InfluencersPage() {
         }
     }
 
-    const getStatusBadge = (status: VerificationStatus) => {
+    const handleResendInvite = async (id: string) => {
+        try {
+            await resendInfluencerInvite(id)
+            toast.success("Invite resent")
+        } catch (error) {
+            toast.error("Failed to resend invite", {
+                description: error instanceof Error ? error.message : undefined,
+            })
+            console.error(error)
+        }
+    }
+
+    const getStatusBadge =(status: VerificationStatus) => {
         switch (status) {
             case VerificationStatus.VERIFIED:
                 return <Badge className="bg-green-500 hover:bg-green-600">VERIFIED</Badge>
@@ -114,6 +127,15 @@ export default function InfluencersPage() {
                                     <TableCell>{influencer.platform}</TableCell>
                                     <TableCell>{getStatusBadge(influencer.verification_status || VerificationStatus.UNVERIFIED)}</TableCell>
                                     <TableCell className="text-right gap-2 flex justify-end">
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => handleResendInvite(influencer.id)}
+                                        >
+                                            <Mail className="w-4 h-4 mr-2" />
+                                            Resend invite
+                                        </Button>
+
                                         {influencer.verification_status === VerificationStatus.UNVERIFIED && (
                                             <Button
                                                 size="sm"

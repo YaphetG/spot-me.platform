@@ -86,7 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Route protection. Both portals are guarded, and /admin additionally
     // requires the ADMIN role — previously /business had no protection at all
-    // and any authenticated user could open /admin.
+    // and any authenticated user could open /admin. Everything else is public,
+    // including /set-password, which invited influencers open without a session.
     useEffect(() => {
         if (!isInitialized) return;
 
