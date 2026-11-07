@@ -1,5 +1,6 @@
 import { OpenAPI } from "@/lib/api-client/core/OpenAPI";
 import "@/lib/api-config";
+import { notifyUnauthorized } from "@/lib/session-expiry";
 
 /**
  * Authenticated fetch against the API.
@@ -23,7 +24,11 @@ export async function apiFetch(
         headers.set("Content-Type", "application/json");
     }
 
-    return fetch(`${OpenAPI.BASE}${path}`, { ...init, headers });
+    const res = await fetch(`${OpenAPI.BASE}${path}`, { ...init, headers });
+    // Backstop for the expiry timer in the auth provider: a rejected token
+    // means the session is over, so end it rather than show empty pages.
+    if (token && res.status === 401) notifyUnauthorized(token);
+    return res;
 }
 
 /** GET returning parsed JSON, or throwing with the API's error detail. */
