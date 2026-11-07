@@ -23,8 +23,17 @@ import { Rocket, Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiSend } from "@/lib/api-fetch";
+import dynamicImport from "next/dynamic";
 
 type EligibleInfluencer = Influencer & { distance_meters?: number };
+
+// mapbox-gl touches `window` on import, so the map only ever loads in the browser.
+const TargetingMap = dynamicImport(() => import("@/components/campaigns/targeting-map"), {
+    ssr: false,
+    loading: () => <div className="h-[360px] w-full rounded-xl border bg-muted animate-pulse" />,
+});
+
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
 export default function TargetingPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -146,6 +155,11 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
 
     const allCurrentSelected = influencers.length > 0 && influencers.every(inf => selectedIds.has(inf.id));
 
+    // Same precedence as the eligible-influencers query: the campaign's own
+    // point, else the business's.
+    const coords = campaign?.location_point?.coordinates ?? business?.location_point?.coordinates;
+    const mapCenter: [number, number] | null = coords && coords.length >= 2 ? [coords[0], coords[1]] : null;
+
     if (!campaign && loading) {
         return (
             <div className="flex h-screen items-center justify-center">
@@ -204,8 +218,27 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
                     </div>
                 </div>
 
+                <div className="md:col-span-3 flex flex-col gap-6">
+                {/* Map Panel */}
+                {!MAPBOX_TOKEN ? (
+                    <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+                        Map unavailable: set <code>NEXT_PUBLIC_MAPBOX_TOKEN</code> to show the targeting radius.
+                    </div>
+                ) : mapCenter ? (
+                    <TargetingMap
+                        token={MAPBOX_TOKEN}
+                        center={mapCenter}
+                        radiusKm={radiusKm}
+                        label={business?.name}
+                    />
+                ) : campaign && business ? (
+                    <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+                        Map unavailable: this business has no location yet.
+                    </div>
+                ) : null}
+
                 {/* List Panel */}
-                <div className="md:col-span-3 rounded-xl border bg-card">
+                <div className="rounded-xl border bg-card">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -260,6 +293,7 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
                             )}
                         </TableBody>
                     </Table>
+                </div>
                 </div>
             </div>
         </div>
