@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,7 +17,11 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { Loader2 } from "lucide-react";
-import { setPassword, SetPasswordError } from "@/lib/influencer-invites";
+import {
+    checkSetPasswordToken,
+    setPassword,
+    SetPasswordError,
+} from "@/lib/influencer-invites";
 
 /**
  * Public landing page for the invite link an admin's manual-add sends (M28).
@@ -44,6 +48,27 @@ function SetPasswordForm() {
     const [outcome, setOutcome] = useState<Outcome | null>(
         token ? null : { kind: "invalid-link", message: "This link is missing its token." }
     );
+    const [isChecking, setIsChecking] = useState(Boolean(token));
+
+    // Say a used or expired link is dead before showing the form. If the check
+    // itself fails (network, 5xx), show the form anyway: submitting still
+    // validates the token.
+    useEffect(() => {
+        if (!token) return;
+        let cancelled = false;
+        checkSetPasswordToken(token)
+            .catch((e) => {
+                if (!cancelled && e instanceof SetPasswordError && e.tokenInvalid) {
+                    setOutcome({ kind: "invalid-link", message: e.message });
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setIsChecking(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [token]);
 
     const form = useForm<z.infer<typeof setPasswordSchema>>({
         resolver: zodResolver(setPasswordSchema),
@@ -86,6 +111,14 @@ function SetPasswordForm() {
                 <p className="text-sm text-muted-foreground">
                     Ask your Spot.me contact to send you a new invite.
                 </p>
+            </CardContent>
+        );
+    }
+
+    if (isChecking) {
+        return (
+            <CardContent className="flex justify-center py-6">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Checking link" />
             </CardContent>
         );
     }

@@ -42,6 +42,25 @@ export class SetPasswordError extends Error {
 }
 
 /**
+ * Check that a set-password link can still be used, without using it up, so
+ * the page can say a link is dead before the influencer types a password.
+ * Public like `setPassword`: no Authorization header. Resolves on 204; throws
+ * a `SetPasswordError` with `tokenInvalid` set when the API rejects the token.
+ */
+export async function checkSetPasswordToken(token: string): Promise<void> {
+    const res = await fetch(`${OpenAPI.BASE}/auth/set-password/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+    });
+    if (res.ok) return;
+    const error = await toError(res);
+    // Same rule as `setPassword`: a 4xx other than 422 means the link is no good.
+    const tokenInvalid = res.status >= 400 && res.status < 500 && res.status !== 422;
+    throw new SetPasswordError(error.message, tokenInvalid);
+}
+
+/**
  * Set the password for an invited account. Public: the token is the only
  * credential, so no Authorization header is sent even if one is stored.
  */
