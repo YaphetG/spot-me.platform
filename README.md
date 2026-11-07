@@ -18,6 +18,20 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Configuration
+
+Copy `.env.example` to `.env.local` and adjust:
+
+- `NEXT_PUBLIC_API_BASE_URL`: the API base URL the browser calls, e.g.
+  `https://api.example.com/api/v1`. Leave it unset to use the same-origin
+  `/api/v1`, which Next.js proxies to the backend. It is inlined at build time,
+  so set it before `npm run build` (or restart `npm run dev`).
+- `API_PROXY_TARGET`: where that proxy forwards `/api/v1/*`. Defaults to
+  `http://localhost:8000`.
+
+The base URL is applied in `src/lib/api-config.ts`, not in the generated
+`src/lib/api-client/`, so regenerating the client keeps it.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
