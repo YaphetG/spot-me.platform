@@ -77,7 +77,7 @@ export type ProofOfPostSubmission = {
     verification_status: VerificationSubmissionStatus;
     scraped_data?: VerificationReport | null;
     /** Why the business rejected the post. Admin-only; never shown to the influencer. */
-    business_rejection_reason?: string | null;
+    business_decision_reason?: string | null;
     created_at?: Timestamp;
     updated_at?: Timestamp;
 };
