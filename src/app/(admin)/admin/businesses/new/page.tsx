@@ -33,18 +33,18 @@ export default function NewBusinessPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
 
-    const form = useForm<z.infer<typeof formSchema>>({
+    const form = useForm<z.input<typeof formSchema>, unknown, z.output<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             name: "",
             description: "",
             website: "",
-            latitude: 0,
-            longitude: 0,
+            latitude: "",
+            longitude: "",
         },
     });
 
-    async function onSubmit(values: z.infer<typeof formSchema>) {
+    async function onSubmit(values: z.output<typeof formSchema>) {
         setIsLoading(true);
         try {
             const lat = values.latitude;

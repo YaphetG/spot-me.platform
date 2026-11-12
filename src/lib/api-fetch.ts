@@ -5,8 +5,8 @@ import { notifyUnauthorized } from "@/lib/session-expiry";
 /**
  * Authenticated fetch against the API.
  *
- * The business portal previously called `fetch("http://localhost:8000/...")`
- * directly, with the host hardcoded in every call site and no Authorization
+ * The business portal previously called `fetch()` against the API directly,
+ * with the host hardcoded in every call site and no Authorization
  * header at all — which stopped working the moment the API began enforcing
  * auth. This routes through the same base URL and token the generated client
  * uses, so there is one place to configure both.
