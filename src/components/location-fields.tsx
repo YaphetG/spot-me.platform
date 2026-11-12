@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { LocationValues } from "@/lib/location";
+import type { LocationFormValues } from "@/lib/location";
 import {
     FormControl,
     FormDescription,
@@ -17,8 +17,8 @@ import {
 import { MapPin } from "lucide-react";
 
 type CoordinateValues = {
-    latitude: number;
-    longitude: number;
+    latitude: number | string;
+    longitude: number | string;
     service_radius_km?: number;
 };
 
@@ -30,8 +30,10 @@ export function LocationFields({ showRadius = false }: { showRadius?: boolean })
     const form = useFormContext<CoordinateValues>();
 
     const handleUseRaleighCenter = () => {
-        form.setValue("latitude", 35.7718);
-        form.setValue("longitude", -78.6406);
+        // Dirty, so an edit form sends them (it PATCHes dirty fields only).
+        const opts = { shouldDirty: true, shouldValidate: true };
+        form.setValue("latitude", 35.7718, opts);
+        form.setValue("longitude", -78.6406, opts);
         toast.info("Using Raleigh Center coordinates");
     };
 
@@ -98,7 +100,7 @@ export function LocationFields({ showRadius = false }: { showRadius?: boolean })
  * name, description, coordinates and service radius.
  */
 export function NewLocationFields() {
-    const form = useFormContext<LocationValues>();
+    const form = useFormContext<LocationFormValues>();
 
     return (
         <div className="space-y-4">

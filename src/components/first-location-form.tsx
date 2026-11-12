@@ -12,6 +12,7 @@ import {
     createLocation,
     locationDefaults,
     locationSchema,
+    type LocationFormValues,
     type LocationValues,
 } from "@/lib/location";
 import { Loader2 } from "lucide-react";
@@ -23,7 +24,7 @@ import { Loader2 } from "lucide-react";
 export function FirstLocationForm({ onCreated }: { onCreated: () => void }) {
     const [isLoading, setIsLoading] = useState(false);
 
-    const form = useForm<LocationValues>({
+    const form = useForm<LocationFormValues, unknown, LocationValues>({
         resolver: zodResolver(locationSchema),
         defaultValues: locationDefaults,
     });

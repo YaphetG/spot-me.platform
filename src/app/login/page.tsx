@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from "next/link";
 import { DefaultService } from "@/lib/api-client";
 import { useAuth } from "@/components/auth-provider";
+import { safeNextPath } from "@/lib/session-expiry";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,9 +28,14 @@ const loginSchema = z.object({
     password: z.string().min(1, "Password is required"),
 });
 
-export default function LoginPage() {
+function LoginForm() {
     const { login } = useAuth();
+    const searchParams = useSearchParams();
     const [isLoading, setIsLoading] = useState(false);
+    // Set by the auth provider when a session ends on its own. Hidden once the
+    // user tries to sign in, so a failure only shows its own error.
+    const [showExpired, setShowExpired] = useState(searchParams.get("expired") === "1");
+    const next = safeNextPath(searchParams.get("next"));
 
     const form = useForm<z.infer<typeof loginSchema>>({
         resolver: zodResolver(loginSchema),
@@ -40,6 +47,7 @@ export default function LoginPage() {
 
     async function onSubmit(values: z.infer<typeof loginSchema>) {
         setIsLoading(true);
+        setShowExpired(false);
         try {
             const formData = {
                 username: values.username,
@@ -51,8 +59,9 @@ export default function LoginPage() {
 
             if (response.access_token) {
                 // login() loads the account to learn its role, then routes to
-                // the right portal. Await it so a failure surfaces here.
-                await login(response.access_token);
+                // the right portal, or back to where the session expired.
+                // Await it so a failure surfaces here.
+                await login(response.access_token, next ?? undefined);
                 toast.success("Successfully logged in!");
             } else {
                 toast.error("Invalid credentials.");
@@ -70,6 +79,63 @@ export default function LoginPage() {
     }
 
     return (
+        <CardContent>
+            {showExpired && (
+                <p
+                    role="status"
+                    className="mb-4 rounded-md border bg-muted px-3 py-2 text-center text-sm"
+                >
+                    Your session expired. Sign in again.
+                </p>
+            )}
+            <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <FormField
+                        control={form.control}
+                        name="username"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Email</FormLabel>
+                                <FormControl>
+                                    <Input type="email" placeholder="admin@spot.me" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="password"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Password</FormLabel>
+                                <FormControl>
+                                    <Input type="password" placeholder="••••••••" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                        {isLoading ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Sign In
+                    </Button>
+                </form>
+            </Form>
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+                New to Spot.me?{" "}
+                <Link href="/signup" className="font-medium text-primary hover:underline">
+                    Create a business account
+                </Link>
+            </p>
+        </CardContent>
+    );
+}
+
+export default function LoginPage() {
+    return (
         <div className="flex h-screen w-full items-center justify-center bg-muted/40 px-4">
             <Card className="w-full max-w-md">
                 <CardHeader className="space-y-1 text-center">
@@ -78,50 +144,10 @@ export default function LoginPage() {
                         Sign in to your business or admin account.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                            <FormField
-                                control={form.control}
-                                name="username"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Email</FormLabel>
-                                        <FormControl>
-                                            <Input type="email" placeholder="admin@spot.me" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="password"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Password</FormLabel>
-                                        <FormControl>
-                                            <Input type="password" placeholder="••••••••" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <Button type="submit" className="w-full" disabled={isLoading}>
-                                {isLoading ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : null}
-                                Sign In
-                            </Button>
-                        </form>
-                    </Form>
-                    <p className="mt-6 text-center text-sm text-muted-foreground">
-                        New to Spot.me?{" "}
-                        <Link href="/signup" className="font-medium text-primary hover:underline">
-                            Create a business account
-                        </Link>
-                    </p>
-                </CardContent>
+                {/* useSearchParams needs a Suspense boundary for static builds. */}
+                <Suspense fallback={null}>
+                    <LoginForm />
+                </Suspense>
             </Card>
         </div>
     );
