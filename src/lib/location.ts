@@ -2,10 +2,30 @@ import * as z from "zod";
 import { DefaultService, type Business } from "@/lib/api-client";
 import "@/lib/api-config";
 
+/**
+ * A required coordinate. Inputs hold strings, and `z.coerce.number()` turns
+ * "" into 0, which put untouched forms at 0, 0 (H10), so a blank is
+ * treated as missing instead.
+ */
+function coordinate(label: string, limit: number) {
+    return z
+        .union([z.number(), z.string()])
+        .transform(v => (typeof v === "string" && v.trim() === "" ? undefined : Number(v)))
+        .pipe(
+            z
+                .number({
+                    required_error: `${label} is required`,
+                    invalid_type_error: `${label} must be a number`,
+                })
+                .min(-limit, `${label} must be between -${limit} and ${limit}`)
+                .max(limit, `${label} must be between -${limit} and ${limit}`)
+        );
+}
+
 /** Coordinates of a business location, shared by every form that sets one. */
 export const coordinatesSchema = z.object({
-    latitude: z.coerce.number().min(-90).max(90),
-    longitude: z.coerce.number().min(-180).max(180),
+    latitude: coordinate("Latitude", 90),
+    longitude: coordinate("Longitude", 180),
 });
 
 /** Everything a business owner provides for a location they create. */
@@ -18,13 +38,17 @@ export const locationSchema = coordinatesSchema.extend({
         .max(200, "Service radius can be at most 200 km"),
 });
 
-export type LocationValues = z.infer<typeof locationSchema>;
+/** A location as validated by `locationSchema`. */
+export type LocationValues = z.output<typeof locationSchema>;
+/** A location as the form holds it: coordinates may still be blank. */
+export type LocationFormValues = z.input<typeof locationSchema>;
 
-export const locationDefaults: LocationValues = {
+/** A new location starts with no coordinates; the owner must enter them. */
+export const locationDefaults: LocationFormValues = {
     name: "",
     description: "",
-    latitude: 0,
-    longitude: 0,
+    latitude: "",
+    longitude: "",
     service_radius_km: 10,
 };
 

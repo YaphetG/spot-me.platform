@@ -30,14 +30,15 @@ const signupSchema = locationSchema.extend({
     password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
-type SignupValues = z.infer<typeof signupSchema>;
+type SignupValues = z.output<typeof signupSchema>;
+type SignupFormValues = z.input<typeof signupSchema>;
 
 export default function SignupPage() {
     const { login } = useAuth();
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
 
-    const form = useForm<SignupValues>({
+    const form = useForm<SignupFormValues, unknown, SignupValues>({
         resolver: zodResolver(signupSchema),
         defaultValues: {
             full_name: "",

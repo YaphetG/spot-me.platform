@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { OpenAPI } from "@/lib/api-client/core/OpenAPI";
 import "@/lib/api-config";
+import { onUnauthorized, tokenExpiresAt } from "@/lib/session-expiry";
 import { useRouter, usePathname } from "next/navigation";
 
 const TOKEN_KEY = "spotme_admin_token";
@@ -55,6 +56,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [token, setToken] = useState<string | null>(null);
     const [user, setUser] = useState<CurrentUser | null>(null);
     const [isInitialized, setIsInitialized] = useState(false);
+    // Set when the session ended on its own, so the route guard sends the
+    // user to /login with a message and a way back, not a bare redirect.
+    const [expired, setExpired] = useState(false);
     const router = useRouter();
     const pathname = usePathname();
 
@@ -75,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     // Expired or revoked.
                     localStorage.removeItem(TOKEN_KEY);
                     OpenAPI.TOKEN = undefined;
+                    if (!cancelled) setExpired(true);
                 }
             }
             if (!cancelled) setIsInitialized(true);
@@ -95,13 +100,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             pathname.startsWith("/admin") || pathname.startsWith("/business");
 
         if (needsAuth && !token) {
-            router.replace("/login");
+            if (expired) {
+                const next = encodeURIComponent(pathname + window.location.search);
+                router.replace(`/login?expired=1&next=${next}`);
+            } else {
+                router.replace("/login");
+            }
             return;
         }
         if (pathname.startsWith("/admin") && user && user.role !== "ADMIN") {
             router.replace("/business");
         }
-    }, [isInitialized, token, user, pathname, router]);
+    }, [isInitialized, token, user, expired, pathname, router]);
+
+    // End the session when the token expires. Clears it as logout() does; the
+    // route guard above then does the redirect.
+    const expireSession = useCallback(() => {
+        OpenAPI.TOKEN = undefined;
+        localStorage.removeItem(TOKEN_KEY);
+        setToken(null);
+        setUser(null);
+        setExpired(true);
+    }, []);
+
+    // Expire at the token's own `exp`. This covers the generated
+    // DefaultService too, without touching its code. Timers don't run
+    // reliably in background tabs, so check again when the tab regains focus.
+    useEffect(() => {
+        if (!token) return;
+        const expiresAt = tokenExpiresAt(token);
+        if (expiresAt === null) return;
+
+        const check = () => {
+            if (Date.now() >= expiresAt) expireSession();
+        };
+        // setTimeout's delay is a 32-bit int; longer would fire at once.
+        const delay = Math.min(Math.max(expiresAt - Date.now(), 0), 2 ** 31 - 1);
+        const timer = setTimeout(check, delay);
+        const onVisible = () => {
+            if (document.visibilityState === "visible") check();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+        window.addEventListener("focus", check);
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener("visibilitychange", onVisible);
+            window.removeEventListener("focus", check);
+        };
+    }, [token, expireSession]);
+
+    // Backstop: apiFetch reports a 401 on a request that carried a token.
+    // Ignore it if that token is no longer the current one (a stale request
+    // finishing after a re-login).
+    useEffect(
+        () =>
+            onUnauthorized((sent) => {
+                if (sent === OpenAPI.TOKEN) expireSession();
+            }),
+        [expireSession]
+    );
 
     const login = useCallback(
         async (newToken: string, redirectTo?: string | null) => {
@@ -114,6 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem(TOKEN_KEY, newToken);
             setToken(newToken);
             setUser(me);
+            setExpired(false);
             // null means the caller navigates itself (sign-up has more to do).
             if (redirectTo !== null) router.push(redirectTo ?? homeForRole(me.role));
         },
@@ -126,6 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
         setUser(null);
+        setExpired(false);
         router.push("/login");
     }, [router]);
 
