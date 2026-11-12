@@ -16,17 +16,28 @@ import {
     createLocation,
     locationDefaults,
     locationSchema,
+    type LocationFormValues,
     type LocationValues,
 } from "@/lib/location"
 import { Loader2, MapPin, Pencil, Plus } from "lucide-react"
 
-/** Form values for an existing location, falling back to the sign-up defaults. */
-function toValues(b: MyBusiness): LocationValues {
+/** Which form fields the user changed (react-hook-form's `dirtyFields`). */
+type DirtyFields = Partial<Record<keyof LocationFormValues, boolean>>
+
+function hasPoint(b: MyBusiness): boolean {
+    return b.latitude != null && b.longitude != null
+}
+
+/**
+ * Form values for an existing location. A missing point stays blank, never
+ * 0, 0, so the owner has to enter one before the form validates.
+ */
+function toValues(b: MyBusiness): LocationFormValues {
     return {
         name: b.name,
         description: b.description ?? "",
-        latitude: b.latitude ?? locationDefaults.latitude,
-        longitude: b.longitude ?? locationDefaults.longitude,
+        latitude: b.latitude ?? "",
+        longitude: b.longitude ?? "",
         service_radius_km:
             b.service_radius_meters != null
                 ? b.service_radius_meters / 1000
@@ -34,20 +45,41 @@ function toValues(b: MyBusiness): LocationValues {
     }
 }
 
+/**
+ * PATCH body with only the fields the user changed, so renaming a location
+ * doesn't resend (or invent) its coordinates. Latitude and longitude are one
+ * point, so both go when either changed.
+ */
+function patchBody(values: LocationValues, dirty: DirtyFields): Record<string, unknown> {
+    const body: Record<string, unknown> = {}
+    if (dirty.name) body.name = values.name
+    if (dirty.description) body.description = values.description ?? ""
+    if (dirty.latitude || dirty.longitude) {
+        body.latitude = values.latitude
+        body.longitude = values.longitude
+    }
+    if (dirty.service_radius_km) {
+        body.service_radius_meters = Math.round(values.service_radius_km * 1000)
+    }
+    return body
+}
+
 function LocationForm({
     defaultValues,
     submitLabel,
+    notice,
     onSubmit,
     onCancel,
 }: {
-    defaultValues: LocationValues
+    defaultValues: LocationFormValues
     submitLabel: string
-    onSubmit: (values: LocationValues) => Promise<void>
+    notice?: string
+    onSubmit: (values: LocationValues, dirty: DirtyFields) => Promise<void>
     onCancel: () => void
 }) {
     const [isLoading, setIsLoading] = useState(false)
 
-    const form = useForm<LocationValues>({
+    const form = useForm<LocationFormValues, unknown, LocationValues>({
         resolver: zodResolver(locationSchema),
         defaultValues,
     })
@@ -55,7 +87,7 @@ function LocationForm({
     async function handleSubmit(values: LocationValues) {
         setIsLoading(true)
         try {
-            await onSubmit(values)
+            await onSubmit(values, form.formState.dirtyFields)
         } catch (error) {
             // POST goes through the generated client (ApiError with a body),
             // PATCH through apiSend (a plain Error with the detail).
@@ -75,6 +107,7 @@ function LocationForm({
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+                {notice && <p className="text-sm text-amber-700">{notice}</p>}
                 <NewLocationFields />
 
                 {rootError && (
@@ -125,14 +158,13 @@ export default function BusinessLocationsPage() {
         setReloadKey(k => k + 1)
     }
 
-    const handleUpdate = async (id: string, values: LocationValues) => {
-        const updated = await apiSend<MyBusiness>(`/businesses/${id}`, "PATCH", {
-            name: values.name,
-            description: values.description ?? "",
-            latitude: values.latitude,
-            longitude: values.longitude,
-            service_radius_meters: Math.round(values.service_radius_km * 1000),
-        })
+    const handleUpdate = async (id: string, values: LocationValues, dirty: DirtyFields) => {
+        const body = patchBody(values, dirty)
+        if (Object.keys(body).length === 0) {
+            setEditingId(null)
+            return
+        }
+        const updated = await apiSend<MyBusiness>(`/businesses/${id}`, "PATCH", body)
         setLocations(prev => prev.map(b => (b.id === updated.id ? { ...b, ...updated } : b)))
         toast.success(`Saved ${updated.name}.`)
         setEditingId(null)
@@ -240,7 +272,12 @@ export default function BusinessLocationsPage() {
                                 <LocationForm
                                     defaultValues={toValues(b)}
                                     submitLabel="Save changes"
-                                    onSubmit={values => handleUpdate(b.id, values)}
+                                    notice={
+                                        hasPoint(b)
+                                            ? undefined
+                                            : "This location has no coordinates yet. Enter them to save: the service radius needs a centre."
+                                    }
+                                    onSubmit={(values, dirty) => handleUpdate(b.id, values, dirty)}
                                     onCancel={() => setEditingId(null)}
                                 />
                             ) : (
@@ -251,7 +288,7 @@ export default function BusinessLocationsPage() {
                                             <MapPin className="h-3 w-3" />
                                             {b.latitude != null && b.longitude != null
                                                 ? `${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)}`
-                                                : "Not shown"}
+                                                : "Location not set"}
                                         </span>
                                     </div>
                                     <div className="flex flex-col">
