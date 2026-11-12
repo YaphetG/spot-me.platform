@@ -251,8 +251,8 @@ export default function PostVerificationsPage() {
                                                     {tab === "disputed" ? (
                                                         // Admin-only: the influencer never sees
                                                         // the business's reason directly.
-                                                        sub.business_rejection_reason ? (
-                                                            <span>{sub.business_rejection_reason}</span>
+                                                        sub.business_decision_reason ? (
+                                                            <span>{sub.business_decision_reason}</span>
                                                         ) : (
                                                             <span className="text-muted-foreground">No reason given.</span>
                                                         )

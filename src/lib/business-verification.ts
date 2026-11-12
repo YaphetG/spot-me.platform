@@ -16,7 +16,7 @@ export type BusinessVerificationStatus =
 
 export interface BusinessVerification {
     status: BusinessVerificationStatus;
-    rejection_reason?: string | null;
+    reason?: string | null;
 }
 
 export interface RegistrationDetails {

@@ -263,7 +263,7 @@ export default function CampaignDetailsPage() {
                     <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
                     <div className="flex-1">
                         <p className="font-medium text-red-900">
-                            Rejected: {verification.rejection_reason || "no reason given"}
+                            Rejected: {verification.reason || "no reason given"}
                         </p>
                         <p className="text-red-800">
                             Correct your registration details and resubmit them to launch.

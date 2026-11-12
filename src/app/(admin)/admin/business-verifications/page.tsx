@@ -174,18 +174,18 @@ export default function BusinessVerificationsPage() {
                                             <TableCell className="px-6 font-medium">{v.legal_name}</TableCell>
                                             <TableCell className="px-6 font-mono text-sm">{v.registration_number}</TableCell>
                                             <TableCell className="px-6">{v.country}</TableCell>
-                                            <TableCell className="px-6 text-sm">{v.account_email}</TableCell>
+                                            <TableCell className="px-6 text-sm">{v.account_email || "—"}</TableCell>
                                             <TableCell className="px-6 text-sm text-muted-foreground">
-                                                {v.submitted_at ? new Date(v.submitted_at).toLocaleDateString() : "—"}
+                                                {v.created_at ? new Date(v.created_at).toLocaleDateString() : "—"}
                                             </TableCell>
                                             <TableCell className="px-6 whitespace-normal">
                                                 <div className="flex flex-col gap-1 max-w-[260px]">
                                                     <Badge variant={STATUS_COLORS[v.status] ?? "secondary"} className="w-fit">
                                                         {STATUS_LABELS[v.status] ?? v.status}
                                                     </Badge>
-                                                    {v.status === "REJECTED" && v.rejection_reason && (
+                                                    {v.status === "REJECTED" && v.reason && (
                                                         <span className="text-xs text-muted-foreground break-words">
-                                                            {v.rejection_reason}
+                                                            {v.reason}
                                                         </span>
                                                     )}
                                                 </div>

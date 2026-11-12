@@ -16,11 +16,12 @@ export interface BusinessVerification {
     legal_name: string;
     registration_number: string;
     country: string;
-    account_email: string;
+    /** Older API builds omit it. */
+    account_email?: string | null;
     status: BusinessVerificationStatus;
-    submitted_at: string;
+    created_at: string;
     reviewed_at?: string | null;
-    rejection_reason?: string | null;
+    reason?: string | null;
 }
 
 export function fetchBusinessVerifications(
