@@ -20,7 +20,7 @@ checks:
 
   # Not required yet: main has one existing lint error
   # (no-explicit-any in src/app/(admin)/admin/influencers/page.tsx). Make this
-  # required once that is fixed (follow-up to spot-me.platform#33).
+  # required once that is fixed (spot-me.platform#36).
   - name: lint
     required: false
     run: |
