@@ -1,0 +1,34 @@
+# Commands Symphony runs to verify agent PRs (`run_checks`, and the `open_pr` gate).
+#
+# The runner executes each `run` with PowerShell (pwsh), not bash. On the agent
+# host `npm`/`npx` are not on that shell's PATH (Node is managed by mise), so each
+# command uses `npm` directly when it is available and falls back to
+# `mise exec -- npm ...` otherwise. `exit $LASTEXITCODE` passes the native exit
+# code through to the runner.
+
+setup:
+  run: |
+    if (Get-Command npm -ErrorAction SilentlyContinue) { npm ci } else { mise exec -- npm ci }
+    exit $LASTEXITCODE
+
+checks:
+  - name: typecheck
+    required: true
+    run: |
+      if (Get-Command npx -ErrorAction SilentlyContinue) { npx tsc --noEmit } else { mise exec -- npx tsc --noEmit }
+      exit $LASTEXITCODE
+
+  # Not required yet: main has one existing lint error
+  # (no-explicit-any in src/app/(admin)/admin/influencers/page.tsx). Make this
+  # required once that is fixed (spot-me.platform#36).
+  - name: lint
+    required: false
+    run: |
+      if (Get-Command npm -ErrorAction SilentlyContinue) { npm run lint } else { mise exec -- npm run lint }
+      exit $LASTEXITCODE
+
+  - name: build
+    required: true
+    run: |
+      if (Get-Command npm -ErrorAction SilentlyContinue) { npm run build } else { mise exec -- npm run build }
+      exit $LASTEXITCODE
