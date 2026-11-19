@@ -18,6 +18,13 @@ checks:
       if (Get-Command npx -ErrorAction SilentlyContinue) { npx tsc --noEmit } else { mise exec -- npx tsc --noEmit }
       exit $LASTEXITCODE
 
+  # Unit tests (`src/**/*.test.ts`) with Node's built-in runner.
+  - name: test
+    required: true
+    run: |
+      if (Get-Command npm -ErrorAction SilentlyContinue) { npm test } else { mise exec -- npm test }
+      exit $LASTEXITCODE
+
   # Not required yet: main has one existing lint error
   # (no-explicit-any in src/app/(admin)/admin/influencers/page.tsx). Make this
   # required once that is fixed (spot-me.platform#36).

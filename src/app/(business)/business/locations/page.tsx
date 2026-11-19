@@ -281,7 +281,7 @@ export default function BusinessLocationsPage() {
                                     notice={
                                         hasPoint(b)
                                             ? undefined
-                                            : "This location has no coordinates yet. Enter them to save: the service radius needs a centre."
+                                            : "This location has no position yet. Enter its postal code to save: the service radius needs a centre."
                                     }
                                     onSubmit={(values, dirty) => handleUpdate(b.id, values, dirty)}
                                     onCancel={() => setEditingId(null)}
