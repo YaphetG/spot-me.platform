@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -23,34 +24,39 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { LocationFields } from "@/components/location-fields"
+import { coordinatesSchema } from "@/lib/location"
 
-const formSchema = z.object({
+// Home is the postal code's centroid (Q20): precise enough for radius
+// matching, without pinning down where the influencer lives (Q21).
+const formSchema = coordinatesSchema.extend({
     handle: z.string().min(2, {
         message: "Handle must be at least 2 characters.",
     }),
     platform: z.enum(["INSTAGRAM", "TIKTOK"]),
-    latitude: z.coerce.number().min(-90).max(90),
-    longitude: z.coerce.number().min(-180).max(180),
     email: z.string().email({ message: "Enter the influencer's email address." }),
 })
 
 export default function ManualEntryPage() {
-    const form = useForm<z.infer<typeof formSchema>>({
+    // Remounts the location fields after a successful add, clearing the code.
+    const [locationKey, setLocationKey] = useState(0)
+    const form = useForm<z.input<typeof formSchema>, unknown, z.output<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             handle: "",
             platform: "INSTAGRAM",
-            latitude: 0,
-            longitude: 0,
+            latitude: "",
+            longitude: "",
             email: "",
         },
     })
 
-    async function onSubmit(values: z.infer<typeof formSchema>) {
+    async function onSubmit(values: z.output<typeof formSchema>) {
         try {
             await manualAddInfluencer(values)
             toast.success(`Invite sent to ${values.email}`)
             form.reset()
+            setLocationKey(k => k + 1)
         } catch (error) {
             console.error(error)
             toast.error("Failed to add influencer", {
@@ -106,34 +112,9 @@ export default function ManualEntryPage() {
                         )}
                     />
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                            control={form.control}
-                            name="latitude"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Latitude</FormLabel>
-                                    <FormControl>
-                                        <Input type="number" step="any" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <FormField
-                            control={form.control}
-                            name="longitude"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Longitude</FormLabel>
-                                    <FormControl>
-                                        <Input type="number" step="any" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                    <div className="space-y-2">
+                        <h2 className="text-sm font-medium">Home area</h2>
+                        <LocationFields key={locationKey} />
                     </div>
 
                     <FormField
