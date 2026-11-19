@@ -35,6 +35,13 @@ const TargetingMap = dynamicImport(() => import("@/components/campaigns/targetin
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
+/** The business's point as the API sends it, or null when it has none. */
+function businessPoint(business: Business | null): { latitude: number; longitude: number } | null {
+    const b = business as (Business & { latitude?: number | null; longitude?: number | null }) | null;
+    if (b?.latitude == null || b?.longitude == null) return null;
+    return { latitude: b.latitude, longitude: b.longitude };
+}
+
 export default function TargetingPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const router = useRouter();
@@ -155,10 +162,12 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
 
     const allCurrentSelected = influencers.length > 0 && influencers.every(inf => selectedIds.has(inf.id));
 
-    // Same precedence as the eligible-influencers query: the campaign's own
-    // point, else the business's.
-    const coords = campaign?.location_point?.coordinates ?? business?.location_point?.coordinates;
-    const mapCenter: [number, number] | null = coords && coords.length >= 2 ? [coords[0], coords[1]] : null;
+    // The eligible-influencers query anchors on the business's point; campaigns
+    // have none of their own. The API sends it as `latitude`/`longitude` (H10).
+    // The generated `Business` model still describes a GeoJSON `location_point`
+    // that the API never returns, so read the real fields (M38).
+    const point = businessPoint(business);
+    const mapCenter: [number, number] | null = point ? [point.longitude, point.latitude] : null;
 
     if (!campaign && loading) {
         return (
@@ -181,9 +190,9 @@ export default function TargetingPage({ params }: { params: Promise<{ id: string
                     <p className="text-muted-foreground mt-1">
                         Campaign: {campaign?.title}
                     </p>
-                    {business && business.location_point?.coordinates && (
+                    {business && point && (
                         <p className="text-sm text-muted-foreground mt-1 flex items-center">
-                            📍 Inheriting location from <strong>{business.name}</strong> @ [{business.location_point.coordinates[1].toFixed(4)}, {business.location_point.coordinates[0].toFixed(4)}]
+                            📍 Inheriting location from <strong>{business.name}</strong> @ [{point.latitude.toFixed(4)}, {point.longitude.toFixed(4)}]
                         </p>
                     )}
                 </div>

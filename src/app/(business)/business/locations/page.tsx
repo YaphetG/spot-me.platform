@@ -83,11 +83,16 @@ function LocationForm({
         resolver: zodResolver(locationSchema),
         defaultValues,
     })
+    // Read during render on purpose. formState is a proxy: react-hook-form only
+    // tracks the parts a component reads while rendering. Read for the first
+    // time inside the submit handler, dirtyFields was always {}, so every edit
+    // sent an empty PATCH body and nothing was saved (M37).
+    const { dirtyFields } = form.formState
 
     async function handleSubmit(values: LocationValues) {
         setIsLoading(true)
         try {
-            await onSubmit(values, form.formState.dirtyFields)
+            await onSubmit(values, dirtyFields)
         } catch (error) {
             // POST goes through the generated client (ApiError with a body),
             // PATCH through apiSend (a plain Error with the detail).
@@ -161,6 +166,7 @@ export default function BusinessLocationsPage() {
     const handleUpdate = async (id: string, values: LocationValues, dirty: DirtyFields) => {
         const body = patchBody(values, dirty)
         if (Object.keys(body).length === 0) {
+            toast.info("No changes to save.")
             setEditingId(null)
             return
         }
