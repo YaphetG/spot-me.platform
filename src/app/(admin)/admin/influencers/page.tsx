@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AdminService, InfluencerRead, VerificationStatus } from "@/lib/api-client"
+import { AdminService, InfluencerRead, VerificationDecision, VerificationStatus } from "@/lib/api-client"
+import { useAuth } from "@/components/auth-provider"
 import {
     Table,
     TableBody,
@@ -19,6 +20,7 @@ import { resendInfluencerInvite } from "@/lib/influencer-invites"
 export default function InfluencersPage() {
     const [influencers, setInfluencers] = useState<InfluencerRead[]>([])
     const [loading, setLoading] = useState(true)
+    const { user } = useAuth()
 
     const fetchInfluencers = async () => {
         try {
@@ -47,15 +49,18 @@ export default function InfluencersPage() {
         }
     }
 
-    const handleSignalVerification = async (id: string, decision: "APPROVE" | "REJECT") => {
+    const handleSignalVerification = async (id: string, decision: VerificationDecision) => {
+        if (!user) {
+            toast.error("Could not identify the signed-in admin. Sign in again.")
+            return
+        }
         try {
             await AdminService.postInfluencersVerificationSignal(id, {
-                decision: decision,
-                reviewer_id: "00000000-0000-0000-0000-000000000000", // TODO: Get actual admin ID
-                action: decision
-            } as any) // Type cast needed until client is perfectly aligned if mismatch exists
+                action: decision,
+                reviewer_id: user.id,
+            })
 
-            toast.success(`Influencer ${decision === "APPROVE" ? "Approved" : "Rejected"}`)
+            toast.success(`Influencer ${decision === VerificationDecision.APPROVE ? "Approved" : "Rejected"}`)
             setTimeout(fetchInfluencers, 1000)
         } catch (error) {
             toast.error(`Failed to ${decision.toLowerCase()} influencer`)
@@ -152,14 +157,14 @@ export default function InfluencersPage() {
                                                 <Button
                                                     size="sm"
                                                     className="bg-green-500 hover:bg-green-600 text-white"
-                                                    onClick={() => handleSignalVerification(influencer.id, "APPROVE")}
+                                                    onClick={() => handleSignalVerification(influencer.id, VerificationDecision.APPROVE)}
                                                 >
                                                     <Check className="w-4 h-4 mr-1" /> Approve
                                                 </Button>
                                                 <Button
                                                     size="sm"
                                                     variant="destructive"
-                                                    onClick={() => handleSignalVerification(influencer.id, "REJECT")}
+                                                    onClick={() => handleSignalVerification(influencer.id, VerificationDecision.REJECT)}
                                                 >
                                                     <X className="w-4 h-4 mr-1" /> Reject
                                                 </Button>
